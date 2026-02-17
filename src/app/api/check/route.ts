@@ -1,11 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Create Supabase client with service role for API access
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+// Create Supabase client lazily at request time (not at build time)
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
 interface CheckRequest {
   license_key: string
@@ -45,7 +47,7 @@ async function createCheckLog(
   geo: GeoInfo
 ) {
   try {
-    await supabase.from('check_logs').insert({
+    await getSupabase().from('check_logs').insert({
       license_key: licenseKey,
       hwid: hwid,
       ip_address: ipAddress,
@@ -80,6 +82,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const supabase = getSupabase()
 
     // Find the license
     const { data: license, error: licenseError } = await supabase
