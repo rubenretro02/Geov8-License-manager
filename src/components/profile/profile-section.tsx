@@ -1,0 +1,362 @@
+'use client'
+
+import { useState } from 'react'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import {
+  User,
+  Mail,
+  Shield,
+  Calendar,
+  Key,
+  Loader2,
+  Check,
+  Coins,
+  FlaskConical,
+  Edit3,
+  Lock
+} from 'lucide-react'
+import { format } from 'date-fns'
+import { toast } from 'sonner'
+import type { Profile } from '@/lib/types'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
+import { useLanguage } from '@/lib/language-context'
+import { updateProfile, changePassword } from '@/lib/actions/profile'
+
+interface ProfileSectionProps {
+  profile: Profile
+  user: SupabaseUser
+}
+
+export function ProfileSection({ profile, user }: ProfileSectionProps) {
+  const { t } = useLanguage()
+  const [isEditing, setIsEditing] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const [formData, setFormData] = useState({
+    full_name: profile.full_name || '',
+    username: profile.username || '',
+  })
+
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  })
+
+  const handleSaveProfile = async () => {
+    setLoading(true)
+    const result = await updateProfile({
+      full_name: formData.full_name,
+      username: formData.username,
+    })
+
+    if (result.success) {
+      toast.success(t('profileUpdated'))
+      setIsEditing(false)
+    } else {
+      toast.error(result.error || t('errorOccurred'))
+    }
+    setLoading(false)
+  }
+
+  const handleChangePassword = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error(t('passwordsDoNotMatch'))
+      return
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      toast.error(t('password') + ' - min 6')
+      return
+    }
+
+    setLoading(true)
+    const result = await changePassword(passwordData.newPassword)
+
+    if (result.success) {
+      toast.success(t('passwordUpdated'))
+      setIsChangingPassword(false)
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+    } else {
+      toast.error(result.error || t('errorOccurred'))
+    }
+    setLoading(false)
+  }
+
+  const getRoleBadge = () => {
+    switch (profile.role) {
+      case 'super_admin':
+        return (
+          <Badge className="bg-violet-500/20 text-violet-400 text-sm px-3 py-1">
+            <Shield className="w-4 h-4 mr-1" />
+            {t('superAdmin')}
+          </Badge>
+        )
+      case 'admin':
+        return (
+          <Badge className="bg-amber-500/20 text-amber-400 text-sm px-3 py-1">
+            <Shield className="w-4 h-4 mr-1" />
+            {t('admin')}
+          </Badge>
+        )
+      case 'user':
+        return (
+          <Badge className="bg-emerald-500/20 text-emerald-400 text-sm px-3 py-1">
+            <User className="w-4 h-4 mr-1" />
+            {t('user')}
+          </Badge>
+        )
+    }
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-white">{t('profileTitle')}</h1>
+        <p className="text-zinc-400 mt-1">{t('profileSubtitle')}</p>
+      </div>
+
+      {/* Profile Card */}
+      <Card className="bg-zinc-900/50 border-zinc-800">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-20 w-20 border-2 border-zinc-700">
+                <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white text-2xl font-bold">
+                  {profile.full_name?.charAt(0).toUpperCase() || profile.username?.charAt(0).toUpperCase() || 'U'}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <CardTitle className="text-white text-xl">
+                  {profile.full_name || profile.username}
+                </CardTitle>
+                <CardDescription className="text-zinc-400">
+                  @{profile.username}
+                </CardDescription>
+                <div className="mt-2">
+                  {getRoleBadge()}
+                </div>
+              </div>
+            </div>
+            {!isEditing && (
+              <Button
+                variant="outline"
+                onClick={() => setIsEditing(true)}
+                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                <Edit3 className="h-4 w-4 mr-2" />
+                {t('edit')}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {isEditing ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-zinc-300">{t('fullName')}</Label>
+                  <Input
+                    value={formData.full_name}
+                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                    className="bg-zinc-800 border-zinc-700 text-white"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-zinc-300">{t('username')}</Label>
+                  <Input
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                    className="bg-zinc-800 border-zinc-700 text-white"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleSaveProfile}
+                  disabled={loading}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4 mr-2" />
+                  )}
+                  {t('save')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setIsEditing(false)
+                    setFormData({
+                      full_name: profile.full_name || '',
+                      username: profile.username || '',
+                    })
+                  }}
+                  className="text-zinc-400 hover:text-white"
+                >
+                  {t('cancel')}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                  <Mail className="h-4 w-4" />
+                  {t('email')}
+                </div>
+                <p className="text-white font-medium">{profile.email}</p>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                  <User className="h-4 w-4" />
+                  {t('username')}
+                </div>
+                <p className="text-white font-medium">@{profile.username}</p>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                  <Calendar className="h-4 w-4" />
+                  {t('memberSince')}
+                </div>
+                <p className="text-white font-medium">
+                  {format(new Date(profile.created_at), 'dd MMM yyyy')}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                  <Shield className="h-4 w-4" />
+                  {t('role')}
+                </div>
+                <p className="text-white font-medium capitalize">{profile.role.replace('_', ' ')}</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Credits Card (for admins) */}
+      {profile.role === 'admin' && (
+        <Card className="bg-zinc-900/50 border-zinc-800">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Coins className="h-5 w-5 text-amber-400" />
+              {t('creditsAndLimits')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="p-4 bg-amber-500/10 rounded-xl border border-amber-500/20">
+                <div className="flex items-center gap-2 text-amber-400 text-sm mb-1">
+                  <Coins className="h-4 w-4" />
+                  {t('availableCredits')}
+                </div>
+                <p className="text-3xl font-bold text-amber-400">{profile.credits || 0}</p>
+              </div>
+              <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/20">
+                <div className="flex items-center gap-2 text-purple-400 text-sm mb-1">
+                  <FlaskConical className="h-4 w-4" />
+                  {t('trialsUsedThisMonth')}
+                </div>
+                <p className="text-3xl font-bold text-purple-400">
+                  {profile.trials_used_this_month || 0} / {profile.trial_limit || 0}
+                </p>
+              </div>
+              <div className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                <div className="flex items-center gap-2 text-emerald-400 text-sm mb-1">
+                  <Key className="h-4 w-4" />
+                  {t('trialsRemaining')}
+                </div>
+                <p className="text-3xl font-bold text-emerald-400">
+                  {(profile.trial_limit || 0) - (profile.trials_used_this_month || 0)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Security Card */}
+      <Card className="bg-zinc-900/50 border-zinc-800">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Lock className="h-5 w-5 text-red-400" />
+            {t('security')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isChangingPassword ? (
+            <div className="space-y-4 max-w-md">
+              <div className="space-y-2">
+                <Label className="text-zinc-300">{t('newPassword')}</Label>
+                <Input
+                  type="password"
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                  placeholder="Min 6"
+                  className="bg-zinc-800 border-zinc-700 text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-zinc-300">{t('confirmPassword')}</Label>
+                <Input
+                  type="password"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                  className="bg-zinc-800 border-zinc-700 text-white"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleChangePassword}
+                  disabled={loading}
+                  className="bg-red-500 hover:bg-red-600 text-white"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4 mr-2" />
+                  )}
+                  {t('changePassword')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setIsChangingPassword(false)
+                    setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+                  }}
+                  className="text-zinc-400 hover:text-white"
+                >
+                  {t('cancel')}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white font-medium">{t('password')}</p>
+                <p className="text-zinc-500 text-sm">{t('lastUpdate')}: {t('unknown')}</p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setIsChangingPassword(true)}
+                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                <Key className="h-4 w-4 mr-2" />
+                {t('changePassword')}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
