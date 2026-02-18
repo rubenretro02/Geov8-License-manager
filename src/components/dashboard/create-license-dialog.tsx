@@ -357,7 +357,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
                       ? 'Trial License'
                       : formData.days_valid === 0
                         ? 'Permanent License'
-                        : '30-Day License'}
+                        : `${formData.days_valid}-Day License`}
                   </span>
                 </div>
                 <Badge className={
@@ -371,7 +371,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
                     ? 'Free'
                     : formData.days_valid === 0
                       ? '10 credits'
-                      : '1 credit'}
+                      : `${(Math.round((formData.days_valid / 30) * 100) / 100).toFixed(2)} credits`}
                 </Badge>
               </div>
             )}

@@ -40,7 +40,7 @@ export function DashboardContent({ licenses, stats, profile, showRevenueChart }:
       {showRevenueChart && <RevenueChart licenses={licenses} />}
 
       {/* Licenses Table with Filters */}
-      <LicensesSection licenses={licenses} statsFilter={statsFilter} onClearStatsFilter={() => setStatsFilter(null)} />
+      <LicensesSection licenses={licenses} statsFilter={statsFilter} onClearStatsFilter={() => setStatsFilter(null)} profile={profile} />
     </div>
   )
 }
