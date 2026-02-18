@@ -130,7 +130,7 @@ export async function setTrialLimit(
 }
 
 // Calculate proportional credits for a given number of days (1 credit = 30 days)
-export function calculateCreditsForDays(daysValid: number, isPermanent: boolean): number {
+export async function calculateCreditsForDays(daysValid: number, isPermanent: boolean): Promise<number> {
   if (isPermanent) return 10
   return Math.round((daysValid / 30) * 100) / 100 // Round to 2 decimals
 }
@@ -175,7 +175,7 @@ export async function deductCreditsForLicense(
   }
 
   // Calculate credits needed proportionally (1 credit = 30 days)
-  const creditsNeeded = calculateCreditsForDays(daysValid, isPermanent)
+  const creditsNeeded = await calculateCreditsForDays(daysValid, isPermanent)
 
   if ((updatedProfile.credits || 0) < creditsNeeded) {
     return {

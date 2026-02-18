@@ -192,7 +192,7 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
 
   // Calculate proportional credits used
   const { calculateCreditsForDays } = await import('./credits')
-  const creditsUsed = isTrial ? 0 : calculateCreditsForDays(formData.days_valid, isPermanent)
+  const creditsUsed = isTrial ? 0 : await calculateCreditsForDays(formData.days_valid, isPermanent)
 
   revalidatePath('/')
   return { success: true, licenseKey, creditsUsed }
@@ -231,7 +231,7 @@ export async function renewLicense(
 
   // Calculate credits needed proportionally (1 credit = 30 days)
   const { calculateCreditsForDays } = await import('./credits')
-  const creditsNeeded = calculateCreditsForDays(daysToAdd, false)
+  const creditsNeeded = await calculateCreditsForDays(daysToAdd, false)
 
   // Deduct credits for non-super_admin users
   if (profile.role !== 'super_admin' && creditsNeeded > 0) {
@@ -355,7 +355,7 @@ export async function deleteLicense(licenseKey: string): Promise<{ success: bool
 
     if (daysRemaining > 0) {
       const { calculateCreditsForDays } = await import('./credits')
-      creditsRefunded = calculateCreditsForDays(daysRemaining, false)
+      creditsRefunded = await calculateCreditsForDays(daysRemaining, false)
 
       // Refund credits to the user who created the license
       const { data: creatorProfile } = await supabase
