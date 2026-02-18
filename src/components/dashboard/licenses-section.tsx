@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react'
 import { format } from 'date-fns'
 import { Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { License } from '@/lib/types'
+import type { License, Profile } from '@/lib/types'
 import { SearchFilters } from './search-filters'
 import { LicensesTable } from './licenses-table'
 import { useLanguage } from '@/lib/language-context'
@@ -15,9 +15,10 @@ interface LicensesSectionProps {
   licenses: License[]
   statsFilter?: StatsFilterType
   onClearStatsFilter?: () => void
+  profile?: Profile | null
 }
 
-export function LicensesSection({ licenses, statsFilter, onClearStatsFilter }: LicensesSectionProps) {
+export function LicensesSection({ licenses, statsFilter, onClearStatsFilter, profile }: LicensesSectionProps) {
   const { t } = useLanguage()
   const [filteredLicenses, setFilteredLicenses] = useState<License[]>(licenses)
   const [isExporting, setIsExporting] = useState(false)
@@ -127,7 +128,7 @@ export function LicensesSection({ licenses, statsFilter, onClearStatsFilter }: L
         onClearStatsFilter={onClearStatsFilter}
       />
 
-      <LicensesTable licenses={filteredLicenses} />
+      <LicensesTable licenses={filteredLicenses} profile={profile} />
     </div>
   )
 }

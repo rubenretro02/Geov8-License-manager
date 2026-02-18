@@ -138,6 +138,10 @@ export async function createUser(formData: CreateUserFormData): Promise<{ succes
     full_name: formData.full_name,
     role: formData.role,
     admin_id: adminId,
+    // Set default credits and trial limits for new admins
+    credits: formData.role === 'admin' ? 0 : 0,
+    trial_limit: formData.role === 'admin' ? 20 : 0,
+    trials_used_this_month: 0,
   }, {
     onConflict: 'id'
   })

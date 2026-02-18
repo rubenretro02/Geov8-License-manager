@@ -35,7 +35,7 @@ import {
   Check,
   X,
 } from 'lucide-react'
-import type { License } from '@/lib/types'
+import type { License, Profile } from '@/lib/types'
 import { toggleLicenseStatus, resetHwid, deleteLicense, updateLicense } from '@/lib/actions/licenses'
 import { toast } from 'sonner'
 import { RenewDialog } from './renew-dialog'
@@ -43,11 +43,16 @@ import { PaymentDialog } from './payment-dialog'
 import { LicenseDetailsDialog } from './license-details-dialog'
 import { useLanguage } from '@/lib/language-context'
 
+import { UserCircle } from 'lucide-react'
+
 interface LicensesTableProps {
   licenses: License[]
+  profile?: Profile | null
 }
 
-export function LicensesTable({ licenses }: LicensesTableProps) {
+export function LicensesTable({ licenses, profile }: LicensesTableProps) {
+  const isSuperAdmin = profile?.role === 'super_admin'
+  const isAdminOrAbove = profile?.role === 'super_admin' || profile?.role === 'admin'
   const { t } = useLanguage()
   const [selectedLicense, setSelectedLicense] = useState<License | null>(null)
   const [renewDialogOpen, setRenewDialogOpen] = useState(false)
@@ -84,7 +89,11 @@ export function LicensesTable({ licenses }: LicensesTableProps) {
 
     const result = await deleteLicense(license.license_key)
     if (result.success) {
-      toast.success(t('licenseDeleted'))
+      if (result.creditsRefunded && result.creditsRefunded > 0) {
+        toast.success(`${t('licenseDeleted')} - ${result.creditsRefunded} credits refunded`)
+      } else {
+        toast.success(t('licenseDeleted'))
+      }
     } else {
       toast.error(result.error || t('errorOccurred'))
     }
@@ -135,13 +144,16 @@ export function LicensesTable({ licenses }: LicensesTableProps) {
               <TableHead className="text-zinc-400 font-semibold">{t('payment')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('expires')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('hwid')}</TableHead>
+              {isAdminOrAbove && (
+                <TableHead className="text-zinc-400 font-semibold">{t('createdBy')}</TableHead>
+              )}
               <TableHead className="text-zinc-400 font-semibold text-right">{t('actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {licenses.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center text-zinc-500">
+                <TableCell colSpan={isAdminOrAbove ? 8 : 7} className="h-32 text-center text-zinc-500">
                   {t('noLicenses')}
                 </TableCell>
               </TableRow>
@@ -264,6 +276,23 @@ export function LicensesTable({ licenses }: LicensesTableProps) {
                         <span className="text-xs text-zinc-500">{t('notActivated')}</span>
                       )}
                     </TableCell>
+                    {isAdminOrAbove && (
+                      <TableCell>
+                        {license.created_by_name ? (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <UserCircle className="h-3.5 w-3.5 text-cyan-400" />
+                              <span className="text-sm text-zinc-300">{license.created_by_name}</span>
+                            </div>
+                            {isSuperAdmin && license.created_by_admin_name && (
+                              <span className="text-[10px] text-zinc-500 pl-5 block">{license.created_by_admin_name}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-zinc-500">-</span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

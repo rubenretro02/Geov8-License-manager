@@ -14,12 +14,20 @@ export async function checkAndResetTrials(profile: Profile): Promise<Profile> {
   if (!profile.trial_reset_date || new Date(profile.trial_reset_date) <= now) {
     const nextReset = new Date(now.getFullYear(), now.getMonth() + 1, 1) // First of next month
 
+    // Ensure admins have a default trial_limit if not set
+    const updateData: Record<string, unknown> = {
+      trials_used_this_month: 0,
+      trial_reset_date: nextReset.toISOString(),
+    }
+
+    // If trial_limit is 0 or null for an admin, set default
+    if (profile.role === 'admin' && (!profile.trial_limit || profile.trial_limit === 0)) {
+      updateData.trial_limit = 20
+    }
+
     const { data } = await supabase
       .from('profiles')
-      .update({
-        trials_used_this_month: 0,
-        trial_reset_date: nextReset.toISOString(),
-      })
+      .update(updateData)
       .eq('id', profile.id)
       .select()
       .single()
@@ -121,10 +129,17 @@ export async function setTrialLimit(
   return { success: true }
 }
 
+// Calculate proportional credits for a given number of days (1 credit = 30 days)
+export async function calculateCreditsForDays(daysValid: number, isPermanent: boolean): Promise<number> {
+  if (isPermanent) return 10
+  return Math.round((daysValid / 30) * 100) / 100 // Round to 2 decimals
+}
+
 // Deduct credits for license creation
 export async function deductCreditsForLicense(
   isPermanent: boolean,
-  isTrial: boolean
+  isTrial: boolean,
+  daysValid: number = 30
 ): Promise<{ success: boolean; error?: string; creditsDeducted?: number }> {
   const supabase = await createClient()
   const profile = await getCurrentProfile()
@@ -143,10 +158,10 @@ export async function deductCreditsForLicense(
 
   // Handle trial licenses
   if (isTrial) {
-    if (updatedProfile.trials_used_this_month >= updatedProfile.trial_limit) {
+    if (updatedProfile.trials_used_this_month >= (updatedProfile.trial_limit || 0)) {
       return {
         success: false,
-        error: `Trial limit reached (${updatedProfile.trial_limit}/month). Contact administrator.`
+        error: `Trial limit reached (${updatedProfile.trial_limit || 0}/month). Contact administrator.`
       }
     }
 
@@ -159,8 +174,8 @@ export async function deductCreditsForLicense(
     return { success: true, creditsDeducted: 0 }
   }
 
-  // Calculate credits needed
-  const creditsNeeded = isPermanent ? 10 : 1
+  // Calculate credits needed proportionally (1 credit = 30 days)
+  const creditsNeeded = await calculateCreditsForDays(daysValid, isPermanent)
 
   if ((updatedProfile.credits || 0) < creditsNeeded) {
     return {
@@ -170,7 +185,7 @@ export async function deductCreditsForLicense(
   }
 
   // Deduct credits
-  const newBalance = (updatedProfile.credits || 0) - creditsNeeded
+  const newBalance = Math.round(((updatedProfile.credits || 0) - creditsNeeded) * 100) / 100
 
   const { error } = await supabase
     .from('profiles')
@@ -186,7 +201,7 @@ export async function deductCreditsForLicense(
     profile_id: profile.id,
     amount: -creditsNeeded,
     type: isPermanent ? 'license_permanent' : 'license_30d',
-    description: isPermanent ? 'Permanent license created' : '30-day license created',
+    description: isPermanent ? 'Permanent license created' : `License created (${daysValid} days = ${creditsNeeded} credits)`,
     created_by: profile.id,
   })
 

@@ -9,7 +9,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
-import { Copy, Key, User, Calendar, Laptop, DollarSign, FileText } from 'lucide-react'
+import { Copy, Key, User, Calendar, Laptop, DollarSign, FileText, UserCircle } from 'lucide-react'
 import type { License } from '@/lib/types'
 import { format } from 'date-fns'
 import { es, enUS } from 'date-fns/locale'
@@ -167,6 +167,32 @@ export function LicenseDetailsDialog({ license, open, onOpenChange }: LicenseDet
                     <p className="text-xs text-zinc-500">{lang === 'es' ? 'Fecha de pago' : 'Payment date'}</p>
                     <p className="text-sm text-white">{formatDate(license.payment_date)}</p>
                   </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Created By */}
+          {license.created_by_name && (
+            <>
+              <Separator className="bg-zinc-800" />
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-zinc-400">
+                  <UserCircle className="h-4 w-4" />
+                  <span className="text-sm font-medium">{t('createdBy')}</span>
+                </div>
+                <div className="pl-6 space-y-1">
+                  <p className="text-sm text-cyan-400 font-medium">{license.created_by_name}</p>
+                  {license.created_by_email && (
+                    <p className="text-xs text-zinc-500">{license.created_by_email}</p>
+                  )}
+                  {license.created_by_admin_name && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Badge className="bg-indigo-500/20 text-indigo-400 text-[10px] px-1.5 py-0">
+                        {license.created_by_admin_name}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
               </div>
             </>

@@ -173,6 +173,20 @@ export const translations = {
     noLogs: 'No logs found',
     showing: 'Showing',
 
+    // Created by
+    createdBy: 'Created by',
+
+    // Date filters
+    dateFrom: 'From',
+    dateTo: 'To',
+    today: 'Today',
+    thisWeek: 'This week',
+    thisMonth: 'This month',
+    clearDates: 'Clear dates',
+
+    // Refund
+    creditsRefunded: 'Credits refunded',
+
     // Export
     exportCSV: 'Export CSV',
     exportingCSV: 'Exporting...',
@@ -390,6 +404,20 @@ export const translations = {
     invalidFilter: 'Inválido',
     noLogs: 'No se encontraron registros',
     showing: 'Mostrando',
+
+    // Created by
+    createdBy: 'Creado por',
+
+    // Date filters
+    dateFrom: 'Desde',
+    dateTo: 'Hasta',
+    today: 'Hoy',
+    thisWeek: 'Esta semana',
+    thisMonth: 'Este mes',
+    clearDates: 'Limpiar fechas',
+
+    // Refund
+    creditsRefunded: 'Créditos devueltos',
 
     // Export
     exportCSV: 'Exportar CSV',

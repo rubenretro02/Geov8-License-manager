@@ -46,6 +46,9 @@ export interface License {
   current_activations: number
   max_activations: number
   created_by: string | null // User who created the license
+  created_by_name?: string | null // Username of creator (populated for admin/super_admin view)
+  created_by_email?: string | null // Email of creator (populated for super_admin view)
+  created_by_admin_name?: string | null // Admin group name (populated for super_admin view)
   admin_id: string | null // Admin/team this license belongs to
 }
 

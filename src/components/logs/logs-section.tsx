@@ -21,9 +21,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
-import { Search, X, Activity, CheckCircle, XCircle, Clock, MapPin, Laptop } from 'lucide-react'
+import { Search, X, Activity, CheckCircle, XCircle, Clock, MapPin, Laptop, CalendarDays } from 'lucide-react'
 import type { CheckLog } from '@/lib/types'
 import { useLanguage } from '@/lib/language-context'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 
 interface LogsSectionProps {
   logs: CheckLog[]
@@ -34,6 +35,11 @@ export function LogsSection({ logs }: LogsSectionProps) {
   const [filteredLogs, setFilteredLogs] = useState<CheckLog[]>(logs)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
+  // Auto-refresh logs every 15 seconds
+  useAutoRefresh({ intervalSeconds: 15 })
 
   const filterLogs = useCallback(() => {
     let filtered = [...logs]
@@ -55,8 +61,21 @@ export function LogsSection({ logs }: LogsSectionProps) {
       filtered = filtered.filter((l) => l.status === statusFilter)
     }
 
+    // Date range filter
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom)
+      fromDate.setHours(0, 0, 0, 0)
+      filtered = filtered.filter((l) => new Date(l.created_at) >= fromDate)
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo)
+      toDate.setHours(23, 59, 59, 999)
+      filtered = filtered.filter((l) => new Date(l.created_at) <= toDate)
+    }
+
     setFilteredLogs(filtered)
-  }, [logs, search, statusFilter])
+  }, [logs, search, statusFilter, dateFrom, dateTo])
 
   useEffect(() => {
     filterLogs()
@@ -65,9 +84,34 @@ export function LogsSection({ logs }: LogsSectionProps) {
   const clearFilters = () => {
     setSearch('')
     setStatusFilter('all')
+    setDateFrom('')
+    setDateTo('')
   }
 
-  const hasFilters = search || statusFilter !== 'all'
+  const hasFilters = search || statusFilter !== 'all' || dateFrom || dateTo
+
+  // Quick date shortcuts
+  const setToday = () => {
+    const today = new Date().toISOString().split('T')[0]
+    setDateFrom(today)
+    setDateTo(today)
+  }
+
+  const setThisWeek = () => {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+    setDateFrom(monday.toISOString().split('T')[0])
+    setDateTo(now.toISOString().split('T')[0])
+  }
+
+  const setThisMonth = () => {
+    const now = new Date()
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+    setDateFrom(firstDay.toISOString().split('T')[0])
+    setDateTo(now.toISOString().split('T')[0])
+  }
 
   // Calculate stats
   const stats = {
@@ -174,41 +218,111 @@ export function LogsSection({ logs }: LogsSectionProps) {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 p-4 bg-zinc-900/50 rounded-xl border border-zinc-800">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-          <Input
-            placeholder={t('searchLogsPlaceholder')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
-          />
+      <div className="space-y-3 p-4 bg-zinc-900/50 rounded-xl border border-zinc-800">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+            <Input
+              placeholder={t('searchLogsPlaceholder')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-700 text-white">
+                <SelectValue placeholder={t('status')} />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-zinc-800">
+                <SelectItem value="all" className="text-white focus:bg-zinc-800">{t('all')}</SelectItem>
+                <SelectItem value="success" className="text-white focus:bg-zinc-800">{t('successFilter')}</SelectItem>
+                <SelectItem value="valid" className="text-white focus:bg-zinc-800">{t('validFilter')}</SelectItem>
+                <SelectItem value="invalid" className="text-white focus:bg-zinc-800">{t('invalidFilter')}</SelectItem>
+                <SelectItem value="expired" className="text-white focus:bg-zinc-800">{t('expiredFilter')}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={clearFilters}
+                className="text-zinc-400 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
-        <div className="flex gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-700 text-white">
-              <SelectValue placeholder={t('status')} />
-            </SelectTrigger>
-            <SelectContent className="bg-zinc-900 border-zinc-800">
-              <SelectItem value="all" className="text-white focus:bg-zinc-800">{t('all')}</SelectItem>
-              <SelectItem value="success" className="text-white focus:bg-zinc-800">{t('successFilter')}</SelectItem>
-              <SelectItem value="valid" className="text-white focus:bg-zinc-800">{t('validFilter')}</SelectItem>
-              <SelectItem value="invalid" className="text-white focus:bg-zinc-800">{t('invalidFilter')}</SelectItem>
-              <SelectItem value="expired" className="text-white focus:bg-zinc-800">{t('expiredFilter')}</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {hasFilters && (
+        {/* Date Range Filter */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-2 border-t border-zinc-800">
+          <div className="flex items-center gap-2 text-zinc-400">
+            <CalendarDays className="h-4 w-4" />
+            <span className="text-sm font-medium">{t('dateFrom')}:</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-[160px] bg-zinc-800 border-zinc-700 text-white [color-scheme:dark]"
+            />
+            <span className="text-zinc-500 text-sm">{t('dateTo').toLowerCase()}:</span>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-[160px] bg-zinc-800 border-zinc-700 text-white [color-scheme:dark]"
+            />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
             <Button
-              variant="ghost"
-              size="icon"
-              onClick={clearFilters}
-              className="text-zinc-400 hover:text-white"
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={setToday}
+              className={`text-xs border-zinc-700 ${
+                dateFrom === new Date().toISOString().split('T')[0] && dateTo === new Date().toISOString().split('T')[0]
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+              }`}
             >
-              <X className="h-4 w-4" />
+              {t('today')}
             </Button>
-          )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={setThisWeek}
+              className="text-xs border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
+            >
+              {t('thisWeek')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={setThisMonth}
+              className="text-xs border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
+            >
+              {t('thisMonth')}
+            </Button>
+            {(dateFrom || dateTo) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => { setDateFrom(''); setDateTo('') }}
+                className="text-xs text-zinc-500 hover:text-white"
+              >
+                <X className="h-3 w-3 mr-1" />
+                {t('clearDates')}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
