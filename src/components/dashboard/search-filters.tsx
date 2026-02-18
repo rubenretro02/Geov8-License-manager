@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select'
 import { Search, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { License } from '@/lib/types'
+import type { License, Profile } from '@/lib/types'
 import { useLanguage } from '@/lib/language-context'
 import type { StatsFilterType } from './stats-cards'
 
@@ -21,14 +21,23 @@ interface SearchFiltersProps {
   onFilter: (filtered: License[]) => void
   statsFilter?: StatsFilterType
   onClearStatsFilter?: () => void
+  profile?: Profile | null
 }
 
-export function SearchFilters({ licenses, onFilter, statsFilter, onClearStatsFilter }: SearchFiltersProps) {
+export function SearchFilters({ licenses, onFilter, statsFilter, onClearStatsFilter, profile }: SearchFiltersProps) {
   const { t } = useLanguage()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [paymentFilter, setPaymentFilter] = useState('all')
   const [expiryFilter, setExpiryFilter] = useState('all')
+  const [createdByFilter, setCreatedByFilter] = useState('all')
+
+  const isAdminOrAbove = profile?.role === 'super_admin' || profile?.role === 'admin'
+
+  // Get unique creator names for the filter dropdown
+  const creatorNames = isAdminOrAbove
+    ? [...new Set(licenses.map(l => l.created_by_name).filter(Boolean))] as string[]
+    : []
 
   const filterLicenses = useCallback(() => {
     let filtered = [...licenses]
@@ -52,15 +61,21 @@ export function SearchFilters({ licenses, onFilter, statsFilter, onClearStatsFil
       }
     }
 
-    // Search filter
+    // Search filter (includes created_by_name)
     if (search) {
       const searchLower = search.toLowerCase()
       filtered = filtered.filter(
         (l) =>
           l.license_key.toLowerCase().includes(searchLower) ||
           l.customer_name?.toLowerCase().includes(searchLower) ||
-          l.customer_email?.toLowerCase().includes(searchLower)
+          l.customer_email?.toLowerCase().includes(searchLower) ||
+          l.created_by_name?.toLowerCase().includes(searchLower)
       )
+    }
+
+    // Created by filter
+    if (createdByFilter !== 'all') {
+      filtered = filtered.filter((l) => l.created_by_name === createdByFilter)
     }
 
     // Status filter (only apply if no stats filter is active for status-related)
