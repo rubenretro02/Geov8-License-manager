@@ -5,6 +5,7 @@ import { StatsCards, StatsFilterType } from './stats-cards'
 import { LicensesSection } from './licenses-section'
 import { RevenueChart } from './revenue-chart'
 import { DashboardHeader } from './dashboard-header'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import type { License, Profile } from '@/lib/types'
 
 interface DashboardContentProps {
@@ -23,6 +24,9 @@ interface DashboardContentProps {
 
 export function DashboardContent({ licenses, stats, profile, showRevenueChart }: DashboardContentProps) {
   const [statsFilter, setStatsFilter] = useState<StatsFilterType>(null)
+
+  // Auto-refresh data every 30 seconds
+  useAutoRefresh({ intervalSeconds: 30 })
 
   return (
     <div className="space-y-8">

@@ -24,6 +24,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Search, X, Activity, CheckCircle, XCircle, Clock, MapPin, Laptop, CalendarDays } from 'lucide-react'
 import type { CheckLog } from '@/lib/types'
 import { useLanguage } from '@/lib/language-context'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 
 interface LogsSectionProps {
   logs: CheckLog[]
@@ -36,6 +37,9 @@ export function LogsSection({ logs }: LogsSectionProps) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+
+  // Auto-refresh logs every 15 seconds
+  useAutoRefresh({ intervalSeconds: 15 })
 
   const filterLogs = useCallback(() => {
     let filtered = [...logs]
