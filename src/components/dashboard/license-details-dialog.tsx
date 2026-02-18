@@ -181,8 +181,18 @@ export function LicenseDetailsDialog({ license, open, onOpenChange }: LicenseDet
                   <UserCircle className="h-4 w-4" />
                   <span className="text-sm font-medium">{t('createdBy')}</span>
                 </div>
-                <div className="pl-6">
+                <div className="pl-6 space-y-1">
                   <p className="text-sm text-cyan-400 font-medium">{license.created_by_name}</p>
+                  {license.created_by_email && (
+                    <p className="text-xs text-zinc-500">{license.created_by_email}</p>
+                  )}
+                  {license.created_by_admin_name && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Badge className="bg-indigo-500/20 text-indigo-400 text-[10px] px-1.5 py-0">
+                        {license.created_by_admin_name}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
               </div>
             </>

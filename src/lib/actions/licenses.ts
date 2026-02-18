@@ -77,22 +77,56 @@ export async function getLicenses(): Promise<License[]> {
     return []
   }
 
-  // For super_admin, populate created_by_name
-  if (profile.role === 'super_admin' && data && data.length > 0) {
+  // Populate created_by info for admin and super_admin
+  if ((profile.role === 'super_admin' || profile.role === 'admin') && data && data.length > 0) {
     const creatorIds = [...new Set(data.map(l => l.created_by).filter(Boolean))]
 
     if (creatorIds.length > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, username')
+        .select('id, username, email, admin_id')
         .in('id', creatorIds)
 
-      const profileMap = new Map(profiles?.map(p => [p.id, p.username]) || [])
+      if (profile.role === 'super_admin') {
+        // For super_admin: also resolve admin group names
+        const adminIds = [...new Set(profiles?.map(p => p.admin_id).filter(Boolean) || [])]
+        let adminNameMap = new Map<string, string>()
 
-      return data.map(license => ({
-        ...license,
-        created_by_name: license.created_by ? profileMap.get(license.created_by) || null : null,
-      }))
+        if (adminIds.length > 0) {
+          const { data: adminProfiles } = await supabase
+            .from('profiles')
+            .select('id, username')
+            .in('id', adminIds)
+
+          adminNameMap = new Map(adminProfiles?.map(p => [p.id, p.username]) || [])
+        }
+
+        const profileMap = new Map(
+          profiles?.map(p => [p.id, {
+            username: p.username,
+            email: p.email,
+            admin_name: p.admin_id ? adminNameMap.get(p.admin_id) || null : null,
+          }]) || []
+        )
+
+        return data.map(license => {
+          const creator = license.created_by ? profileMap.get(license.created_by) : null
+          return {
+            ...license,
+            created_by_name: creator?.username || null,
+            created_by_email: creator?.email || null,
+            created_by_admin_name: creator?.admin_name || null,
+          }
+        })
+      } else {
+        // For admin: just show username
+        const profileMap = new Map(profiles?.map(p => [p.id, p.username]) || [])
+
+        return data.map(license => ({
+          ...license,
+          created_by_name: license.created_by ? profileMap.get(license.created_by) || null : null,
+        }))
+      }
     }
   }
 

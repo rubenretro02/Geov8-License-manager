@@ -52,6 +52,7 @@ interface LicensesTableProps {
 
 export function LicensesTable({ licenses, profile }: LicensesTableProps) {
   const isSuperAdmin = profile?.role === 'super_admin'
+  const isAdminOrAbove = profile?.role === 'super_admin' || profile?.role === 'admin'
   const { t } = useLanguage()
   const [selectedLicense, setSelectedLicense] = useState<License | null>(null)
   const [renewDialogOpen, setRenewDialogOpen] = useState(false)
@@ -143,7 +144,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
               <TableHead className="text-zinc-400 font-semibold">{t('payment')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('expires')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('hwid')}</TableHead>
-              {isSuperAdmin && (
+              {isAdminOrAbove && (
                 <TableHead className="text-zinc-400 font-semibold">{t('createdBy')}</TableHead>
               )}
               <TableHead className="text-zinc-400 font-semibold text-right">{t('actions')}</TableHead>
@@ -152,7 +153,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
           <TableBody>
             {licenses.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isSuperAdmin ? 8 : 7} className="h-32 text-center text-zinc-500">
+                <TableCell colSpan={isAdminOrAbove ? 8 : 7} className="h-32 text-center text-zinc-500">
                   {t('noLicenses')}
                 </TableCell>
               </TableRow>
@@ -275,12 +276,17 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
                         <span className="text-xs text-zinc-500">{t('notActivated')}</span>
                       )}
                     </TableCell>
-                    {isSuperAdmin && (
+                    {isAdminOrAbove && (
                       <TableCell>
                         {license.created_by_name ? (
-                          <div className="flex items-center gap-1.5">
-                            <UserCircle className="h-3.5 w-3.5 text-cyan-400" />
-                            <span className="text-sm text-zinc-300">{license.created_by_name}</span>
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <UserCircle className="h-3.5 w-3.5 text-cyan-400" />
+                              <span className="text-sm text-zinc-300">{license.created_by_name}</span>
+                            </div>
+                            {isSuperAdmin && license.created_by_admin_name && (
+                              <span className="text-[10px] text-zinc-500 pl-5 block">{license.created_by_admin_name}</span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-xs text-zinc-500">-</span>
