@@ -122,7 +122,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check HWID binding - STRICT: One license = One PC
-    if (license.hwid) {
+    // Check for both null and empty string
+    const hasExistingHwid = license.hwid && license.hwid.trim().length > 0
+
+    if (hasExistingHwid) {
       // License already has a HWID bound
       if (license.hwid !== hwid) {
         // Different PC trying to use this license - REJECT
@@ -133,7 +136,9 @@ export async function POST(request: NextRequest) {
         )
       }
       // Same PC - allow (HWID matches)
-    } else {
+    }
+
+    if (!hasExistingHwid) {
       // First activation - bind HWID to this PC
       const { error: updateError } = await supabase
         .from('licenses')
