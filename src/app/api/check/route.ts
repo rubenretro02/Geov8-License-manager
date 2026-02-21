@@ -121,18 +121,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Check HWID binding
-    if (license.hwid && license.hwid !== hwid) {
-      await createCheckLog(license_key, hwid, ip, 'invalid', 'HWID mismatch', geo)
-      return NextResponse.json(
-        { valid: false, error: 'License is bound to a different device' },
-        { status: 403 }
-      )
-    }
-
-    // If no HWID bound yet, bind it
-    if (!license.hwid) {
-      await supabase
+    // Check HWID binding - STRICT: One license = One PC
+    if (license.hwid) {
+      // License already has a HWID bound
+      if (license.hwid !== hwid) {
+        // Different PC trying to use this license - REJECT
+        await createCheckLog(license_key, hwid, ip, 'invalid', `HWID mismatch. License bound to: ${license.hwid.substring(0, 8)}...`, geo)
+        return NextResponse.json(
+          { valid: false, error: 'License is already activated on another device. Contact support to reset.' },
+          { status: 403 }
+        )
+      }
+      // Same PC - allow (HWID matches)
+    } else {
+      // First activation - bind HWID to this PC
+      const { error: updateError } = await supabase
         .from('licenses')
         .update({
           hwid: hwid,
@@ -140,6 +143,34 @@ export async function POST(request: NextRequest) {
           current_activations: 1,
         })
         .eq('license_key', license_key)
+
+      // CRITICAL: Verify the HWID was saved successfully
+      if (updateError) {
+        console.error('Failed to bind HWID:', updateError)
+        await createCheckLog(license_key, hwid, ip, 'error', `Failed to bind HWID: ${updateError.message}`, geo)
+        return NextResponse.json(
+          { valid: false, error: 'Failed to activate license. Please try again.' },
+          { status: 500 }
+        )
+      }
+
+      // Double-check: Verify the HWID was actually saved in the database
+      const { data: verifyLicense, error: verifyError } = await supabase
+        .from('licenses')
+        .select('hwid')
+        .eq('license_key', license_key)
+        .single()
+
+      if (verifyError || !verifyLicense?.hwid || verifyLicense.hwid !== hwid) {
+        console.error('HWID verification failed:', { verifyError, savedHwid: verifyLicense?.hwid, expectedHwid: hwid })
+        await createCheckLog(license_key, hwid, ip, 'error', 'HWID binding verification failed', geo)
+        return NextResponse.json(
+          { valid: false, error: 'License activation failed. Please contact support.' },
+          { status: 500 }
+        )
+      }
+
+      console.log(`License ${license_key} successfully bound to HWID: ${hwid.substring(0, 8)}...`)
     }
 
     // Success - create log and return
