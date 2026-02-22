@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from '@/lib/actions/auth'
@@ -13,7 +14,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
-import { Shield, LogOut, User, Key, Users, Globe, Activity, Coins, FlaskConical } from 'lucide-react'
+import { Shield, LogOut, User, Key, Users, Globe, Activity, Coins, FlaskConical, Download, Loader2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
 import { useLanguage } from '@/lib/language-context'
@@ -26,9 +28,35 @@ interface HeaderProps {
 export function Header({ user, profile }: HeaderProps) {
   const pathname = usePathname()
   const { lang, setLang, t } = useLanguage()
+  const [downloading, setDownloading] = useState(false)
 
   const handleSignOut = async () => {
     await signOut()
+  }
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('app_version')
+        .select('version, download_url')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (error || !data?.download_url) {
+        alert('No download available')
+        return
+      }
+
+      window.open(data.download_url, '_blank')
+    } catch (err) {
+      console.error('Download error:', err)
+      alert('Failed to get download link')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   const getRoleBadge = () => {
@@ -94,6 +122,19 @@ export function Header({ user, profile }: HeaderProps) {
                 </Button>
               </Link>
             ))}
+            <Button
+              onClick={handleDownload}
+              disabled={downloading}
+              variant="ghost"
+              className="gap-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+            >
+              {downloading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {t('downloadApp')}
+            </Button>
           </nav>
         </div>
 

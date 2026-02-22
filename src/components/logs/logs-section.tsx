@@ -61,16 +61,14 @@ export function LogsSection({ logs }: LogsSectionProps) {
       filtered = filtered.filter((l) => l.status === statusFilter)
     }
 
-    // Date range filter
+    // Date range filter - use local timezone
     if (dateFrom) {
-      const fromDate = new Date(dateFrom)
-      fromDate.setHours(0, 0, 0, 0)
+      const fromDate = new Date(dateFrom + 'T00:00:00')
       filtered = filtered.filter((l) => new Date(l.created_at) >= fromDate)
     }
 
     if (dateTo) {
-      const toDate = new Date(dateTo)
-      toDate.setHours(23, 59, 59, 999)
+      const toDate = new Date(dateTo + 'T23:59:59.999')
       filtered = filtered.filter((l) => new Date(l.created_at) <= toDate)
     }
 
@@ -90,9 +88,17 @@ export function LogsSection({ logs }: LogsSectionProps) {
 
   const hasFilters = search || statusFilter !== 'all' || dateFrom || dateTo
 
+  // Helper to format date as YYYY-MM-DD in LOCAL timezone (not UTC)
+  const formatLocalDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   // Quick date shortcuts
   const setToday = () => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = formatLocalDate(new Date())
     setDateFrom(today)
     setDateTo(today)
   }
@@ -102,15 +108,15 @@ export function LogsSection({ logs }: LogsSectionProps) {
     const dayOfWeek = now.getDay()
     const monday = new Date(now)
     monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
-    setDateFrom(monday.toISOString().split('T')[0])
-    setDateTo(now.toISOString().split('T')[0])
+    setDateFrom(formatLocalDate(monday))
+    setDateTo(formatLocalDate(now))
   }
 
   const setThisMonth = () => {
     const now = new Date()
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-    setDateFrom(firstDay.toISOString().split('T')[0])
-    setDateTo(now.toISOString().split('T')[0])
+    setDateFrom(formatLocalDate(firstDay))
+    setDateTo(formatLocalDate(now))
   }
 
   // Calculate stats
@@ -285,7 +291,7 @@ export function LogsSection({ logs }: LogsSectionProps) {
               size="sm"
               onClick={setToday}
               className={`text-xs border-zinc-700 ${
-                dateFrom === new Date().toISOString().split('T')[0] && dateTo === new Date().toISOString().split('T')[0]
+                dateFrom === formatLocalDate(new Date()) && dateTo === formatLocalDate(new Date())
                   ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
               }`}
