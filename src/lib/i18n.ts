@@ -230,6 +230,7 @@ export const translations = {
     profileUpdated: 'Profile updated successfully',
     lastUpdate: 'Last update',
     unknown: 'unknown',
+    downloadApp: 'Download App',
   },
   es: {
     // Navigation
@@ -462,6 +463,7 @@ export const translations = {
     profileUpdated: 'Perfil actualizado correctamente',
     lastUpdate: 'Última actualización',
     unknown: 'desconocido',
+    downloadApp: 'Descargar App',
   },
 }
 
