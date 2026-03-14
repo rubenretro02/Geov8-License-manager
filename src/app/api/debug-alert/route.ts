@@ -70,23 +70,25 @@ export async function GET(request: NextRequest) {
       }
 
       // Step 6: Would we actually send?
+      const wouldSend = !!(
+        process.env.TELEGRAM_BOT_TOKEN &&
+        license.alert_enabled &&
+        license.alert_on_fail &&
+        profile.telegram_chat_id &&
+        profile.telegram_enabled
+      )
+      
       debug.step6_final_check = {
         has_bot_token: !!process.env.TELEGRAM_BOT_TOKEN,
         license_alert_enabled: license.alert_enabled,
         license_alert_on_fail: license.alert_on_fail,
         owner_has_chat_id: !!profile.telegram_chat_id,
         owner_telegram_enabled: profile.telegram_enabled,
-        WOULD_SEND_ON_FAILURE: !!(
-          process.env.TELEGRAM_BOT_TOKEN &&
-          license.alert_enabled &&
-          license.alert_on_fail &&
-          profile.telegram_chat_id &&
-          profile.telegram_enabled
-        )
+        WOULD_SEND_ON_FAILURE: wouldSend
       }
 
       // Step 7: Test send if all conditions are met
-      if (debug.step6_final_check.WOULD_SEND_ON_FAILURE && profile.telegram_chat_id) {
+      if (wouldSend && profile.telegram_chat_id) {
         try {
           const response = await fetch(
             `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
