@@ -47,6 +47,11 @@ export async function POST(request: NextRequest) {
 
     const { data: license } = await getSupabase().from('licenses').select('*').eq('license_key', license_key).single()
     if (!license) return NextResponse.json({ success: false, error: 'License not found' }, { status: 404 })
+    
+    console.log('[Notify] License found:', license.license_key)
+    console.log('[Notify] created_by:', license.created_by)
+    console.log('[Notify] admin_id:', license.admin_id)
+    
     if (!license.alert_enabled) return NextResponse.json({ success: true, message: 'Alerts disabled' })
 
     const isError = status === 'error'
@@ -65,9 +70,19 @@ export async function POST(request: NextRequest) {
 
     // Get profile chat ID (admin)
     const ownerId = license.created_by || license.admin_id
-    const { chatId: profileChatId, enabled } = await getUserTelegramChatId(ownerId)
-    if (profileChatId && enabled) {
-      allChatIds.add(profileChatId)
+    
+    let profileChatId: string | null = null
+    let enabled = false
+    
+    if (ownerId) {
+      const result = await getUserTelegramChatId(ownerId)
+      profileChatId = result.chatId
+      enabled = result.enabled
+      if (profileChatId && enabled) {
+        allChatIds.add(profileChatId)
+      }
+    } else {
+      console.log('[Notify] No ownerId found - skipping profile lookup')
     }
 
     // Add custom chat IDs from request body
@@ -75,6 +90,11 @@ export async function POST(request: NextRequest) {
       const customChatIds = chat_ids.split(',').map(id => id.trim()).filter(id => id)
       customChatIds.forEach(id => allChatIds.add(id))
     }
+
+    console.log('[Notify] Owner ID:', ownerId)
+    console.log('[Notify] Profile chatId:', profileChatId, 'enabled:', enabled)
+    console.log('[Notify] Custom chat_ids:', chat_ids)
+    console.log('[Notify] All chat IDs to send:', Array.from(allChatIds))
 
     // Check if we have any chat IDs to send to
     if (allChatIds.size === 0) {
@@ -88,6 +108,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, sent_to: allChatIds.size })
   } catch (error) {
+    console.error('[Notify] Error:', error)
     return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 })
   }
 }
