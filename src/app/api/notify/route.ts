@@ -122,7 +122,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. AGENT chat IDs (from request - optional)
+    // 2. AGENT chat ID from configurations table (by HWID)
+    if (license.hwid) {
+      const { data: agentConfig } = await supabase
+        .from('configurations')
+        .select('telegram_enabled, telegram_chat_ids')
+        .eq('hardware_id', license.hwid)
+        .single()
+      
+      console.log('[Notify] Agent config from DB:', agentConfig)
+      
+      if (agentConfig?.telegram_enabled && agentConfig?.telegram_chat_ids) {
+        const dbChatIds = agentConfig.telegram_chat_ids.split(',').map((id: string) => id.trim()).filter((id: string) => id)
+        for (const id of dbChatIds) {
+          if (!allChatIds.includes(id)) {
+            allChatIds.push(id)
+            console.log('[Notify] Added agent chat ID from DB:', id)
+          }
+        }
+      }
+    }
+
+    // 3. AGENT chat IDs (from request - optional)
     if (chat_ids && typeof chat_ids === 'string' && chat_ids.trim()) {
       const agentChatIds = chat_ids.split(',').map((id: string) => id.trim()).filter((id: string) => id)
       console.log('[Notify] Agent chat IDs:', agentChatIds)
