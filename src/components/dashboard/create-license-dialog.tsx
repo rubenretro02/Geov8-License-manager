@@ -98,6 +98,11 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
       payment_amount: 50,
       payment_method: 'paypal',
       notes: '',
+      alert_enabled: false,
+      alert_ip: true,
+      alert_gps: true,
+      alert_on_fail: true,
+      alert_on_success: false,
     })
     setCreatedKey(null)
     setCopied(false)

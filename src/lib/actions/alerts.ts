@@ -4,6 +4,16 @@ import { createClient } from '@/lib/supabase/server'
 import { CheckLog } from '@/lib/types'
 import { getCurrentProfile } from './licenses'
 
+// Type for log with joined license data
+interface CheckLogWithLicense extends CheckLog {
+  licenses?: {
+    customer_name: string | null
+    created_by: string | null
+    admin_id: string | null
+    alert_enabled: boolean
+  } | null
+}
+
 export async function getAlertLogs(
   statusFilter: 'all' | 'error' | 'success' = 'all',
   typeFilter: 'all' | 'ip' | 'gps' = 'all'
@@ -42,17 +52,17 @@ export async function getAlertLogs(
   }
 
   // Filter by user permissions and type
-  let filteredData = data || []
+  let filteredData: CheckLogWithLicense[] = (data as CheckLogWithLicense[]) || []
 
   // Filter based on role
   if (profile.role === 'user') {
     // Users see only their own created licenses
-    filteredData = filteredData.filter((log: any) =>
+    filteredData = filteredData.filter((log) =>
       log.licenses?.created_by === profile.id
     )
   } else if (profile.role === 'admin') {
     // Admins see their team's licenses
-    filteredData = filteredData.filter((log: any) =>
+    filteredData = filteredData.filter((log) =>
       log.licenses?.admin_id === profile.id || log.licenses?.admin_id === profile.admin_id
     )
   }
@@ -60,19 +70,19 @@ export async function getAlertLogs(
 
   // Filter by type (IP/GPS)
   if (typeFilter === 'ip') {
-    filteredData = filteredData.filter((log: any) => {
+    filteredData = filteredData.filter((log) => {
       const msg = (log.message || '').toLowerCase()
-      return msg.includes('ip:') || msg.includes('ip location') || msg.includes('country') && !msg.includes('gps')
+      return msg.includes('ip:') || msg.includes('ip location') || (msg.includes('country') && !msg.includes('gps'))
     })
   } else if (typeFilter === 'gps') {
-    filteredData = filteredData.filter((log: any) => {
+    filteredData = filteredData.filter((log) => {
       const msg = (log.message || '').toLowerCase()
       return msg.includes('gps:') || msg.includes('coordinate') || msg.includes('gps')
     })
   }
 
   // Map to include customer_name
-  return filteredData.map((log: any) => ({
+  return filteredData.map((log) => ({
     ...log,
     customer_name: log.licenses?.customer_name || null,
   }))
