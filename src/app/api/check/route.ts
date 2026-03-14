@@ -20,6 +20,122 @@ interface GeoInfo {
   city?: string
 }
 
+interface License {
+  id: string
+  license_key: string
+  customer_name: string | null
+  hwid: string | null
+  is_active: boolean
+  expires_at: string | null
+  is_trial: boolean
+  alert_enabled: boolean
+  alert_ip: boolean
+  alert_gps: boolean
+  alert_on_fail: boolean
+  alert_on_success: boolean
+  created_by: string | null
+  admin_id: string | null
+}
+
+// Get Telegram bot token from Supabase
+async function getTelegramToken(): Promise<string | null> {
+  try {
+    const { data } = await getSupabase()
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'telegram_bot_token')
+      .single()
+    return data?.value || null
+  } catch {
+    return null
+  }
+}
+
+// Get user's Telegram chat ID
+async function getUserTelegramChatId(userId: string): Promise<{ chatId: string | null, enabled: boolean }> {
+  try {
+    const { data } = await getSupabase()
+      .from('profiles')
+      .select('telegram_chat_id, telegram_enabled')
+      .eq('id', userId)
+      .single()
+    return {
+      chatId: data?.telegram_chat_id || null,
+      enabled: data?.telegram_enabled || false
+    }
+  } catch {
+    return { chatId: null, enabled: false }
+  }
+}
+
+// Send Telegram notification
+async function sendTelegramAlert(
+  license: License,
+  status: string,
+  message: string,
+  ip: string,
+  geo: GeoInfo
+) {
+  // Only send if license has alerts enabled
+  if (!license.alert_enabled) return
+
+  // Check if should alert based on status
+  if (status === 'error' && !license.alert_on_fail) return
+  if (status === 'valid' && !license.alert_on_success) return
+
+  // Get bot token
+  const botToken = await getTelegramToken()
+  if (!botToken) {
+    console.log('No Telegram bot token configured')
+    return
+  }
+
+  // Get the owner's chat ID (created_by or admin_id)
+  const ownerId = license.created_by || license.admin_id
+  if (!ownerId) return
+
+  const { chatId, enabled } = await getUserTelegramChatId(ownerId)
+  if (!chatId || !enabled) {
+    console.log('User has no Telegram chat ID or notifications disabled')
+    return
+  }
+
+  // Build message
+  const icon = status === 'valid' ? '🟢' : '🔴'
+  const title = status === 'valid' ? 'CHECK PASSED' : 'CHECK FAILED'
+
+  const msgLines = [
+    `${icon} <b>${title}</b>`,
+    '',
+    `📋 License: <code>${license.license_key}</code>`,
+    `👤 Agent: ${license.customer_name || 'Unknown'}`,
+    `🌐 IP: ${ip}`,
+    `📍 Location: ${geo.city || '--'}, ${geo.state || '--'}, ${geo.country || '--'}`,
+    '',
+    `❌ ${message}`,
+    '',
+    `🕐 ${new Date().toLocaleString()}`,
+  ]
+
+  const text = msgLines.join('\n')
+
+  // Send to Telegram
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'HTML',
+      }),
+    })
+    console.log(`Telegram alert sent to ${chatId}`)
+  } catch (err) {
+    console.error('Failed to send Telegram alert:', err)
+  }
+}
+
 async function getGeoFromIP(ip: string): Promise<GeoInfo> {
   try {
     // Use a free IP geolocation service
@@ -85,7 +201,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabase()
 
-    // Find the license
+    // Find the license (include alert settings)
     const { data: license, error: licenseError } = await supabase
       .from('licenses')
       .select('*')
@@ -100,9 +216,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Cast to License type
+    const lic = license as License
+
     // Check if license is active
-    if (!license.is_active) {
+    if (!lic.is_active) {
       await createCheckLog(license_key, hwid, ip, 'invalid', 'License is deactivated', geo)
+      await sendTelegramAlert(lic, 'error', 'License is deactivated', ip, geo)
       return NextResponse.json(
         { valid: false, error: 'License is deactivated' },
         { status: 403 }
@@ -110,36 +230,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if license is expired
-    if (license.expires_at) {
-      const expiresAt = new Date(license.expires_at)
+    if (lic.expires_at) {
+      const expiresAt = new Date(lic.expires_at)
       if (expiresAt < new Date()) {
         await createCheckLog(license_key, hwid, ip, 'expired', 'License has expired', geo)
+        await sendTelegramAlert(lic, 'error', 'License has expired', ip, geo)
         return NextResponse.json(
-          { valid: false, error: 'License has expired', expires_at: license.expires_at },
+          { valid: false, error: 'License has expired', expires_at: lic.expires_at },
           { status: 403 }
         )
       }
     }
 
     // Check HWID binding - STRICT: One license = One PC
-    // Check for both null and empty string
-    const hasExistingHwid = license.hwid && license.hwid.trim().length > 0
+    const hasExistingHwid = lic.hwid && lic.hwid.trim().length > 0
 
     if (hasExistingHwid) {
-      // License already has a HWID bound
-      if (license.hwid !== hwid) {
-        // Different PC trying to use this license - REJECT
-        await createCheckLog(license_key, hwid, ip, 'invalid', `HWID mismatch. License bound to: ${license.hwid.substring(0, 8)}...`, geo)
+      if (lic.hwid !== hwid) {
+        await createCheckLog(license_key, hwid, ip, 'invalid', `HWID mismatch. License bound to: ${lic.hwid!.substring(0, 8)}...`, geo)
+        await sendTelegramAlert(lic, 'error', `HWID mismatch - different device trying to use license`, ip, geo)
         return NextResponse.json(
           { valid: false, error: 'License is already activated on another device. Contact support to reset.' },
           { status: 403 }
         )
       }
-      // Same PC - allow (HWID matches)
     }
 
     if (!hasExistingHwid) {
-      // First activation - bind HWID to this PC
       const { error: updateError } = await supabase
         .from('licenses')
         .update({
@@ -149,7 +266,6 @@ export async function POST(request: NextRequest) {
         })
         .eq('license_key', license_key)
 
-      // CRITICAL: Verify the HWID was saved successfully
       if (updateError) {
         console.error('Failed to bind HWID:', updateError)
         await createCheckLog(license_key, hwid, ip, 'error', `Failed to bind HWID: ${updateError.message}`, geo)
@@ -159,7 +275,6 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Double-check: Verify the HWID was actually saved in the database
       const { data: verifyLicense, error: verifyError } = await supabase
         .from('licenses')
         .select('hwid')
@@ -178,14 +293,19 @@ export async function POST(request: NextRequest) {
       console.log(`License ${license_key} successfully bound to HWID: ${hwid.substring(0, 8)}...`)
     }
 
-    // Success - create log and return
+    // Success - create log and optionally send success alert
     await createCheckLog(license_key, hwid, ip, 'valid', 'License is valid', geo)
+
+    // Send success alert if enabled
+    if (lic.alert_on_success) {
+      await sendTelegramAlert(lic, 'valid', 'License check passed', ip, geo)
+    }
 
     return NextResponse.json({
       valid: true,
-      customer_name: license.customer_name,
-      expires_at: license.expires_at,
-      is_trial: license.is_trial,
+      customer_name: lic.customer_name,
+      expires_at: lic.expires_at,
+      is_trial: lic.is_trial,
       message: 'License is valid',
     })
 
@@ -211,7 +331,6 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Create a mock request to reuse POST logic
   const mockRequest = new NextRequest(request.url, {
     method: 'POST',
     headers: request.headers,
