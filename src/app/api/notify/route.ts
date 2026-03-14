@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     const icon = isError ? '🔴' : '🟢'
     const title = isError ? 'CHECK FAILED' : 'CHECK PASSED'
-    const text = `${icon} <b>${title}</b>\n\n📋 License: <code>${license.license_key}</code>\n👤 Agent: ${license.customer_name || 'Unknown'}\n🌐 IP: ${ip || '--'}\n📍 Location: ${location || '--'}\n\n${isError ? '👎' : '👍'} ${message}\n\n🕐 ${new Date().toLocaleString()}`
+    const text = `${icon} <b>${title}</b>\n\n📋 License: <code>${license.license_key}</code>\n👤 Agent: ${license.customer_name || 'Unknown'}\n🌐 IP: ${ip || '--'}\n📍 Location: ${location || '--'}\n\n${isError ? '👎' : '👍'} ${message}\n\n🕐 ${new Date().toLocaleString('es-US', { timeZone: 'America/New_York' })}`
 
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
