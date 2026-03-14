@@ -1,6 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
+interface NotifyRequest {
+  license_key: string
+  status?: string
+  ip?: string
+  location?: string
+  message?: string
+  chat_ids?: string
+}
+
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,9 +32,17 @@ async function getUserTelegramChatId(userId: string) {
   } catch { return { chatId: null, enabled: false } }
 }
 
+async function sendTelegramMessage(botToken: string, chatId: string, text: string) {
+  await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+  })
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { license_key, status, ip, location, message } = await request.json()
+    const { license_key, status, ip, location, message, chat_ids }: NotifyRequest = await request.json()
     if (!license_key) return NextResponse.json({ success: false, error: 'Missing license_key' }, { status: 400 })
 
     const { data: license } = await getSupabase().from('licenses').select('*').eq('license_key', license_key).single()
@@ -39,19 +56,25 @@ export async function POST(request: NextRequest) {
     const botToken = await getTelegramToken()
     if (!botToken) return NextResponse.json({ success: false, error: 'No bot token' }, { status: 500 })
 
-    const ownerId = license.created_by || license.admin_id
-    const { chatId, enabled } = await getUserTelegramChatId(ownerId)
-    if (!chatId || !enabled) return NextResponse.json({ success: false, error: 'Telegram not configured' }, { status: 500 })
-
     const icon = isError ? '🔴' : '🟢'
     const title = isError ? 'CHECK FAILED' : 'CHECK PASSED'
     const text = `${icon} <b>${title}</b>\n\n📋 License: <code>${license.license_key}</code>\n👤 Agent: ${license.customer_name || 'Unknown'}\n🌐 IP: ${ip || '--'}\n📍 Location: ${location || '--'}\n\n${isError ? '👎' : '👍'} ${message}\n\n🕐 ${new Date().toLocaleString('es-US', { timeZone: 'America/New_York' })}`
 
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-    })
+    // If chat_ids is provided, send to those chat IDs directly
+    if (chat_ids && chat_ids.trim()) {
+      const chatIdList = chat_ids.split(',').map(id => id.trim()).filter(id => id)
+      for (const chatId of chatIdList) {
+        await sendTelegramMessage(botToken, chatId, text)
+      }
+      return NextResponse.json({ success: true, sent_to: chatIdList.length })
+    }
+
+    // Otherwise, use the existing logic (get from user profile)
+    const ownerId = license.created_by || license.admin_id
+    const { chatId, enabled } = await getUserTelegramChatId(ownerId)
+    if (!chatId || !enabled) return NextResponse.json({ success: false, error: 'Telegram not configured' }, { status: 500 })
+
+    await sendTelegramMessage(botToken, chatId, text)
 
     return NextResponse.json({ success: true })
   } catch (error) {
