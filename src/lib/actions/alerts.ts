@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { CheckLog } from '@/lib/types'
+import { CheckLog, License } from '@/lib/types'
 import { getCurrentProfile } from './licenses'
 
 // Type for log with joined license data
@@ -86,6 +86,37 @@ export async function getAlertLogs(
     ...log,
     customer_name: log.licenses?.customer_name || null,
   }))
+}
+
+export async function getMonitoredLicenses(): Promise<License[]> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+
+  if (!profile) return []
+
+  let query = supabase
+    .from('licenses')
+    .select('*')
+    .eq('alert_enabled', true)
+    .order('created_at', { ascending: false })
+
+  // Filter by role
+  if (profile.role === 'user') {
+    query = query.eq('created_by', profile.id)
+  } else if (profile.role === 'admin') {
+    const adminId = profile.id
+    query = query.eq('admin_id', adminId)
+  }
+  // super_admin sees all
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('Error fetching monitored licenses:', error)
+    return []
+  }
+
+  return (data as License[]) || []
 }
 
 export async function sendTelegramAlert(

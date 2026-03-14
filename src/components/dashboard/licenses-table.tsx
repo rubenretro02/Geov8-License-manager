@@ -34,9 +34,11 @@ import {
   Pencil,
   Check,
   X,
+  Bell,
 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 import type { License, Profile } from '@/lib/types'
-import { toggleLicenseStatus, resetHwid, deleteLicense, updateLicense } from '@/lib/actions/licenses'
+import { toggleLicenseStatus, resetHwid, deleteLicense, updateLicense, updateLicenseAlerts } from '@/lib/actions/licenses'
 import { toast } from 'sonner'
 import { RenewDialog } from './renew-dialog'
 import { PaymentDialog } from './payment-dialog'
@@ -119,6 +121,21 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
     }
   }
 
+  const handleToggleAlert = async (license: License, enabled: boolean) => {
+    const result = await updateLicenseAlerts(license.license_key, {
+      alert_enabled: enabled,
+      alert_ip: license.alert_ip ?? true,
+      alert_gps: license.alert_gps ?? true,
+      alert_on_fail: license.alert_on_fail ?? true,
+      alert_on_success: license.alert_on_success ?? false,
+    })
+    if (result.success) {
+      toast.success(enabled ? 'Alerts enabled' : 'Alerts disabled')
+    } else {
+      toast.error(result.error || t('errorOccurred'))
+    }
+  }
+
   const getExpiryStatus = (license: License) => {
     if (!license.expires_at) return { label: t('permanent'), variant: 'default' as const }
 
@@ -140,6 +157,11 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
             <TableRow className="border-zinc-800 hover:bg-transparent">
               <TableHead className="text-zinc-400 font-semibold">{t('license')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('customer')}</TableHead>
+              <TableHead className="text-zinc-400 font-semibold text-center">
+                <div className="flex items-center justify-center gap-1">
+                  <Bell className="h-4 w-4" />
+                </div>
+              </TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('status')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('payment')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('expires')}</TableHead>
@@ -153,7 +175,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
           <TableBody>
             {licenses.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isAdminOrAbove ? 8 : 7} className="h-32 text-center text-zinc-500">
+                <TableCell colSpan={isAdminOrAbove ? 9 : 8} className="h-32 text-center text-zinc-500">
                   {t('noLicenses')}
                 </TableCell>
               </TableRow>
@@ -221,6 +243,13 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
                         </div>
                       )}
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Switch
+                        checked={license.alert_enabled || false}
+                        onCheckedChange={(checked) => handleToggleAlert(license, checked)}
+                        className="data-[state=checked]:bg-amber-500"
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex gap-1.5">
                         {license.is_trial && (
@@ -245,7 +274,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
                             : 'bg-zinc-700 text-zinc-400'
                         }
                       >
-                        {license.is_paid ? `$${license.payment_amount}` : t('unpaidStatus')}
+                        {license.is_paid ? `${license.payment_amount}` : t('unpaidStatus')}
                       </Badge>
                     </TableCell>
                     <TableCell>
