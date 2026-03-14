@@ -18,14 +18,18 @@ import {
   Coins,
   FlaskConical,
   Edit3,
-  Lock
+  Lock,
+  Bell,
+  Send,
+  MessageCircle
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import type { Profile } from '@/lib/types'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { useLanguage } from '@/lib/language-context'
-import { updateProfile, changePassword } from '@/lib/actions/profile'
+import { updateProfile, changePassword, updateTelegramSettings } from '@/lib/actions/profile'
+import { Switch } from '@/components/ui/switch'
 
 interface ProfileSectionProps {
   profile: Profile
@@ -33,7 +37,7 @@ interface ProfileSectionProps {
 }
 
 export function ProfileSection({ profile, user }: ProfileSectionProps) {
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   const [isEditing, setIsEditing] = useState(false)
   const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -48,6 +52,11 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
     newPassword: '',
     confirmPassword: '',
   })
+
+  // Telegram settings
+  const [telegramChatId, setTelegramChatId] = useState(profile.telegram_chat_id || '')
+  const [telegramEnabled, setTelegramEnabled] = useState(profile.telegram_enabled || false)
+  const [savingTelegram, setSavingTelegram] = useState(false)
 
   const handleSaveProfile = async () => {
     setLoading(true)
@@ -87,6 +96,21 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
       toast.error(result.error || t('errorOccurred'))
     }
     setLoading(false)
+  }
+
+  const handleSaveTelegram = async () => {
+    setSavingTelegram(true)
+    const result = await updateTelegramSettings({
+      telegram_chat_id: telegramChatId,
+      telegram_enabled: telegramEnabled,
+    })
+
+    if (result.success) {
+      toast.success(lang === 'es' ? 'Configuración guardada' : 'Settings saved')
+    } else {
+      toast.error(result.error || t('errorOccurred'))
+    }
+    setSavingTelegram(false)
   }
 
   const getRoleBadge = () => {
@@ -283,6 +307,85 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Telegram Notifications Card */}
+      <Card className="bg-zinc-900/50 border-zinc-800">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Send className="h-5 w-5 text-blue-400" />
+            Telegram Notifications
+          </CardTitle>
+          <CardDescription className="text-zinc-400">
+            {lang === 'es'
+              ? 'Recibe alertas de tus licencias en Telegram'
+              : 'Receive license alerts on Telegram'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Enable/Disable Toggle */}
+          <div className="flex items-center justify-between p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
+            <div className="flex items-center gap-3">
+              <Bell className="h-5 w-5 text-blue-400" />
+              <div>
+                <p className="text-white font-medium">
+                  {lang === 'es' ? 'Activar Notificaciones' : 'Enable Notifications'}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {lang === 'es'
+                    ? 'Recibir alertas cuando un check falle'
+                    : 'Receive alerts when a check fails'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={telegramEnabled}
+              onCheckedChange={setTelegramEnabled}
+            />
+          </div>
+
+          {/* Chat ID Input */}
+          <div className="space-y-3">
+            <Label className="text-zinc-300 flex items-center gap-2">
+              <MessageCircle className="h-4 w-4" />
+              Chat ID
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                value={telegramChatId}
+                onChange={(e) => setTelegramChatId(e.target.value)}
+                placeholder="123456789"
+                className="bg-zinc-800 border-zinc-700 text-white flex-1"
+              />
+              <Button
+                onClick={handleSaveTelegram}
+                disabled={savingTelegram}
+                className="bg-blue-500 hover:bg-blue-600 text-white"
+              >
+                {savingTelegram ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-zinc-500">
+              {lang === 'es' ? (
+                <>
+                  Para obtener tu Chat ID:
+                  <br />1. Abre Telegram y busca @userinfobot
+                  <br />2. Envía /start y te dará tu ID
+                </>
+              ) : (
+                <>
+                  To get your Chat ID:
+                  <br />1. Open Telegram and search @userinfobot
+                  <br />2. Send /start and it will give you your ID
+                </>
+              )}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Security Card */}
       <Card className="bg-zinc-900/50 border-zinc-800">

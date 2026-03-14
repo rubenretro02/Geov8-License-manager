@@ -79,3 +79,33 @@ export async function changePassword(newPassword: string): Promise<{ success: bo
 
   return { success: true }
 }
+
+interface TelegramSettings {
+  telegram_chat_id: string
+  telegram_enabled: boolean
+}
+
+export async function updateTelegramSettings(data: TelegramSettings): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { success: false, error: 'No autorizado' }
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      telegram_chat_id: data.telegram_chat_id || null,
+      telegram_enabled: data.telegram_enabled,
+    })
+    .eq('id', user.id)
+
+  if (error) {
+    console.error('Error updating telegram settings:', error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/profile')
+  return { success: true }
+}
