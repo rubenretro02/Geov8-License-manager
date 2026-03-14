@@ -193,6 +193,15 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
     daysValid = 5 // Default 5 days for trials if not specified
   }
 
+  // Get alert settings from formData (with defaults)
+  const alertSettings = {
+    alert_enabled: 'alert_enabled' in formData ? (formData as Record<string, unknown>).alert_enabled : false,
+    alert_ip: 'alert_ip' in formData ? (formData as Record<string, unknown>).alert_ip : true,
+    alert_gps: 'alert_gps' in formData ? (formData as Record<string, unknown>).alert_gps : true,
+    alert_on_fail: 'alert_on_fail' in formData ? (formData as Record<string, unknown>).alert_on_fail : true,
+    alert_on_success: 'alert_on_success' in formData ? (formData as Record<string, unknown>).alert_on_success : false,
+  }
+
   const licenseData: Partial<License> = {
     license_key: licenseKey,
     customer_name: formData.customer_name || null,
@@ -208,6 +217,12 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
     max_activations: 1,
     created_by: profile.id,
     admin_id: adminId,
+    // Alert settings
+    alert_enabled: alertSettings.alert_enabled as boolean,
+    alert_ip: alertSettings.alert_ip as boolean,
+    alert_gps: alertSettings.alert_gps as boolean,
+    alert_on_fail: alertSettings.alert_on_fail as boolean,
+    alert_on_success: alertSettings.alert_on_success as boolean,
   }
 
   // Set expiration date

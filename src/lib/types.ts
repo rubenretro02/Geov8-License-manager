@@ -101,6 +101,12 @@ export type LicenseFormData = {
   payment_amount: number
   payment_method: string
   notes: string
+  // Alert settings (optional)
+  alert_enabled?: boolean
+  alert_ip?: boolean
+  alert_gps?: boolean
+  alert_on_fail?: boolean
+  alert_on_success?: boolean
 }
 
 export type CreateUserFormData = {
