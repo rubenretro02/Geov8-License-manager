@@ -23,7 +23,8 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Loader2, Copy, Check, Coins, FlaskConical, AlertCircle } from 'lucide-react'
+import { Plus, Loader2, Copy, Check, Coins, FlaskConical, AlertCircle, Bell } from 'lucide-react'
+import { AlertSettings } from './alert-settings'
 import { createLicense } from '@/lib/actions/licenses'
 import { toast } from 'sonner'
 import { useLanguage } from '@/lib/language-context'
@@ -49,6 +50,12 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
     payment_amount: 50,
     payment_method: 'paypal',
     notes: '',
+    // Alert settings
+    alert_enabled: false,
+    alert_ip: true,
+    alert_gps: true,
+    alert_on_fail: true,
+    alert_on_success: false,
   })
 
   // When trial is toggled, adjust days if needed
@@ -91,6 +98,11 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
       payment_amount: 50,
       payment_method: 'paypal',
       notes: '',
+      alert_enabled: false,
+      alert_ip: true,
+      alert_gps: true,
+      alert_on_fail: true,
+      alert_on_success: false,
     })
     setCreatedKey(null)
     setCopied(false)
@@ -333,9 +345,19 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="Notas adicionales..."
                 className="bg-zinc-800 border-zinc-700 text-white resize-none"
-                rows={3}
+                rows={2}
               />
             </div>
+
+            {/* Alert Settings */}
+            <AlertSettings
+              enabled={formData.alert_enabled}
+              alertIp={formData.alert_ip}
+              alertGps={formData.alert_gps}
+              alertOnFail={formData.alert_on_fail}
+              alertOnSuccess={formData.alert_on_success}
+              onChange={(settings) => setFormData({ ...formData, ...settings })}
+            />
 
             {/* Credit Cost Indicator */}
             {profile && profile.role !== 'super_admin' && (

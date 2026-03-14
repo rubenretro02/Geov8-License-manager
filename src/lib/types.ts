@@ -14,6 +14,9 @@ export interface Profile {
   trial_limit: number // Max trials per month
   trials_used_this_month: number
   trial_reset_date: string | null // When trials reset
+  // Telegram notifications
+  telegram_chat_id: string | null
+  telegram_enabled: boolean
 }
 
 export interface CreditTransaction {
@@ -50,6 +53,12 @@ export interface License {
   created_by_email?: string | null // Email of creator (populated for super_admin view)
   created_by_admin_name?: string | null // Admin group name (populated for super_admin view)
   admin_id: string | null // Admin/team this license belongs to
+  // Alert settings per license
+  alert_enabled: boolean
+  alert_ip: boolean
+  alert_gps: boolean
+  alert_on_fail: boolean
+  alert_on_success: boolean
 }
 
 export interface CheckLog {

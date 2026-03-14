@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
-import { Shield, LogOut, User, Key, Users, Globe, Activity, Coins, FlaskConical, Download, Loader2 } from 'lucide-react'
+import { Shield, LogOut, User, Key, Users, Globe, Activity, Coins, FlaskConical, Download, Loader2, Bell } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
@@ -87,6 +87,7 @@ export function Header({ user, profile }: HeaderProps) {
   const navItems = [
     { href: '/', label: t('licenses'), icon: Key },
     { href: '/logs', label: t('logs'), icon: Activity },
+    { href: '/alerts', label: 'Alerts', icon: Bell },
     ...(profile?.role === 'super_admin' ? [{ href: '/credits', label: t('credits'), icon: Coins }] : []),
     ...(profile?.role !== 'user' ? [{ href: '/team', label: t('team'), icon: Users }] : []),
   ]
