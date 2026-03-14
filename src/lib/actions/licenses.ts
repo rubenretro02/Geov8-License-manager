@@ -252,6 +252,32 @@ export async function updateLicense(
   return { success: true }
 }
 
+export async function updateLicenseAlerts(
+  licenseKey: string,
+  alertSettings: {
+    alert_enabled: boolean
+    alert_ip: boolean
+    alert_gps: boolean
+    alert_on_fail: boolean
+    alert_on_success: boolean
+  }
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('licenses')
+    .update(alertSettings)
+    .eq('license_key', licenseKey)
+
+  if (error) {
+    console.error('Error updating license alerts:', error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/')
+  return { success: true }
+}
+
 export async function renewLicense(
   licenseKey: string,
   daysToAdd: number
