@@ -23,10 +23,46 @@ export async function getAlertLogs(
 
   if (!profile) return []
 
-  // First get all check logs
+  // STEP 1: Get ONLY licenses that have alerts enabled (filtered by role)
+  let licensesQuery = supabase
+    .from('licenses')
+    .select('license_key, customer_name, created_by, admin_id')
+    .eq('alert_enabled', true)
+
+  // Filter by role
+  if (profile.role === 'user') {
+    licensesQuery = licensesQuery.eq('created_by', profile.id)
+  } else if (profile.role === 'admin') {
+    licensesQuery = licensesQuery.eq('admin_id', profile.id)
+  }
+  // super_admin sees all alert-enabled licenses
+
+  const { data: alertLicenses, error: licensesError } = await licensesQuery
+
+  if (licensesError) {
+    console.error('Error fetching alert licenses:', licensesError)
+    return []
+  }
+
+  // If no licenses have alerts enabled, return empty
+  if (!alertLicenses || alertLicenses.length === 0) {
+    return []
+  }
+
+  // Create map for quick lookup
+  const licensesMap = new Map<string, { customer_name: string | null }>()
+  const alertLicenseKeys: string[] = []
+
+  alertLicenses.forEach(l => {
+    licensesMap.set(l.license_key, { customer_name: l.customer_name })
+    alertLicenseKeys.push(l.license_key)
+  })
+
+  // STEP 2: Get check logs ONLY for licenses with alerts enabled
   let query = supabase
     .from('check_logs')
     .select('*')
+    .in('license_key', alertLicenseKeys)
     .order('created_at', { ascending: false })
     .limit(100)
 
@@ -46,45 +82,9 @@ export async function getAlertLogs(
 
   if (!data || data.length === 0) return []
 
-  // Get license keys from logs
-  const licenseKeys = [...new Set(data.map(log => log.license_key).filter(Boolean))]
+  // Filter by type (IP/GPS) if needed
+  let filteredData = data
 
-  // Fetch license data separately
-  const licensesMap = new Map<string, { customer_name: string | null, created_by: string | null, admin_id: string | null }>()
-
-  if (licenseKeys.length > 0) {
-    const { data: licenses } = await supabase
-      .from('licenses')
-      .select('license_key, customer_name, created_by, admin_id')
-      .in('license_key', licenseKeys)
-
-    if (licenses) {
-      licenses.forEach(l => {
-        licensesMap.set(l.license_key, {
-          customer_name: l.customer_name,
-          created_by: l.created_by,
-          admin_id: l.admin_id
-        })
-      })
-    }
-  }
-
-  // Filter by user permissions
-  let filteredData = data.filter((log) => {
-    const license = log.license_key ? licensesMap.get(log.license_key) : null
-
-    if (profile.role === 'super_admin') {
-      return true // Super admin sees all
-    } else if (profile.role === 'admin') {
-      // Admins see their team's licenses
-      return license?.admin_id === profile.id
-    } else {
-      // Users see only their own created licenses
-      return license?.created_by === profile.id
-    }
-  })
-
-  // Filter by type (IP/GPS)
   if (typeFilter === 'ip') {
     filteredData = filteredData.filter((log) => {
       const msg = (log.message || '').toLowerCase()
