@@ -60,23 +60,33 @@ export async function POST(request: NextRequest) {
     const title = isError ? 'CHECK FAILED' : 'CHECK PASSED'
     const text = `${icon} <b>${title}</b>\n\n📋 License: <code>${license.license_key}</code>\n👤 Agent: ${license.customer_name || 'Unknown'}\n🌐 IP: ${ip || '--'}\n📍 Location: ${location || '--'}\n\n${isError ? '👎' : '👍'} ${message}\n\n🕐 ${new Date().toLocaleString('es-US', { timeZone: 'America/New_York' })}`
 
-    // If chat_ids is provided, send to those chat IDs directly
-    if (chat_ids && chat_ids.trim()) {
-      const chatIdList = chat_ids.split(',').map(id => id.trim()).filter(id => id)
-      for (const chatId of chatIdList) {
-        await sendTelegramMessage(botToken, chatId, text)
-      }
-      return NextResponse.json({ success: true, sent_to: chatIdList.length })
+    // Collect all chat IDs to notify
+    const allChatIds = new Set<string>()
+
+    // Get profile chat ID (admin)
+    const ownerId = license.created_by || license.admin_id
+    const { chatId: profileChatId, enabled } = await getUserTelegramChatId(ownerId)
+    if (profileChatId && enabled) {
+      allChatIds.add(profileChatId)
     }
 
-    // Otherwise, use the existing logic (get from user profile)
-    const ownerId = license.created_by || license.admin_id
-    const { chatId, enabled } = await getUserTelegramChatId(ownerId)
-    if (!chatId || !enabled) return NextResponse.json({ success: false, error: 'Telegram not configured' }, { status: 500 })
+    // Add custom chat IDs from request body
+    if (chat_ids && chat_ids.trim()) {
+      const customChatIds = chat_ids.split(',').map(id => id.trim()).filter(id => id)
+      customChatIds.forEach(id => allChatIds.add(id))
+    }
 
-    await sendTelegramMessage(botToken, chatId, text)
+    // Check if we have any chat IDs to send to
+    if (allChatIds.size === 0) {
+      return NextResponse.json({ success: false, error: 'No chat IDs available' }, { status: 500 })
+    }
 
-    return NextResponse.json({ success: true })
+    // Send to all unique chat IDs
+    for (const chatId of allChatIds) {
+      await sendTelegramMessage(botToken, chatId, text)
+    }
+
+    return NextResponse.json({ success: true, sent_to: allChatIds.size })
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 })
   }
