@@ -43,6 +43,7 @@ import { toast } from 'sonner'
 import { RenewDialog } from './renew-dialog'
 import { PaymentDialog } from './payment-dialog'
 import { LicenseDetailsDialog } from './license-details-dialog'
+import { AlertSettingsDialog } from './alert-settings-dialog'
 import { useLanguage } from '@/lib/language-context'
 
 import { UserCircle } from 'lucide-react'
@@ -55,11 +56,12 @@ interface LicensesTableProps {
 export function LicensesTable({ licenses, profile }: LicensesTableProps) {
   const isSuperAdmin = profile?.role === 'super_admin'
   const isAdminOrAbove = profile?.role === 'super_admin' || profile?.role === 'admin'
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   const [selectedLicense, setSelectedLicense] = useState<License | null>(null)
   const [renewDialogOpen, setRenewDialogOpen] = useState(false)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+  const [alertSettingsDialogOpen, setAlertSettingsDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
 
@@ -343,6 +345,16 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
                           <DropdownMenuItem
                             onClick={() => {
                               setSelectedLicense(license)
+                              setAlertSettingsDialogOpen(true)
+                            }}
+                            className="text-zinc-300 focus:text-white focus:bg-zinc-800"
+                          >
+                            <Bell className="h-4 w-4 mr-2" />
+                            {lang === 'es' ? 'Configurar Alertas' : 'Configure Alerts'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedLicense(license)
                               setRenewDialogOpen(true)
                             }}
                             className="text-zinc-300 focus:text-white focus:bg-zinc-800"
@@ -423,6 +435,11 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
             license={selectedLicense}
             open={detailsDialogOpen}
             onOpenChange={setDetailsDialogOpen}
+          />
+          <AlertSettingsDialog
+            license={selectedLicense}
+            open={alertSettingsDialogOpen}
+            onOpenChange={setAlertSettingsDialogOpen}
           />
         </>
       )}

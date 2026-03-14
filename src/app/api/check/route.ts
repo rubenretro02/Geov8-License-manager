@@ -37,8 +37,14 @@ interface License {
   admin_id: string | null
 }
 
-// Get Telegram bot token from Supabase
+// Get Telegram bot token - first from env, then from Supabase
 async function getTelegramToken(): Promise<string | null> {
+  // Try environment variable first
+  if (process.env.TELEGRAM_BOT_TOKEN) {
+    return process.env.TELEGRAM_BOT_TOKEN
+  }
+
+  // Fallback to database
   try {
     const { data } = await getSupabase()
       .from('app_settings')
@@ -76,33 +82,54 @@ async function sendTelegramAlert(
   ip: string,
   geo: GeoInfo
 ) {
-  // Only send if license has alerts enabled
-  if (!license.alert_enabled) return
+  console.log(`[Telegram] Attempting alert for license ${license.license_key}, status: ${status}`)
+  console.log(`[Telegram] License alert_enabled: ${license.alert_enabled}, alert_on_fail: ${license.alert_on_fail}, alert_on_success: ${license.alert_on_success}`)
 
-  // Check if should alert based on status
-  if (status === 'error' && !license.alert_on_fail) return
-  if (status === 'valid' && !license.alert_on_success) return
+  // Only send if license has alerts enabled
+  if (!license.alert_enabled) {
+    console.log('[Telegram] Alerts not enabled for this license')
+    return
+  }
+
+  // Check if should alert based on status (any non-valid status is a fail)
+  const isFailure = status !== 'valid'
+  if (isFailure && !license.alert_on_fail) {
+    console.log('[Telegram] Failure alerts not enabled')
+    return
+  }
+  if (!isFailure && !license.alert_on_success) {
+    console.log('[Telegram] Success alerts not enabled')
+    return
+  }
 
   // Get bot token
   const botToken = await getTelegramToken()
   if (!botToken) {
-    console.log('No Telegram bot token configured')
+    console.log('[Telegram] No bot token configured')
     return
   }
+  console.log('[Telegram] Bot token found')
 
   // Get the owner's chat ID (created_by or admin_id)
   const ownerId = license.created_by || license.admin_id
-  if (!ownerId) return
+  if (!ownerId) {
+    console.log('[Telegram] No owner ID found for license')
+    return
+  }
+  console.log(`[Telegram] Owner ID: ${ownerId}`)
 
   const { chatId, enabled } = await getUserTelegramChatId(ownerId)
+  console.log(`[Telegram] User chatId: ${chatId}, enabled: ${enabled}`)
+
   if (!chatId || !enabled) {
-    console.log('User has no Telegram chat ID or notifications disabled')
+    console.log('[Telegram] User has no Telegram chat ID or notifications disabled')
     return
   }
 
   // Build message
-  const icon = status === 'valid' ? '🟢' : '🔴'
-  const title = status === 'valid' ? 'CHECK PASSED' : 'CHECK FAILED'
+  const icon = isFailure ? '🔴' : '🟢'
+  const title = isFailure ? 'CHECK FAILED' : 'CHECK PASSED'
+  const detailIcon = isFailure ? '❌' : '✅'
 
   const msgLines = [
     `${icon} <b>${title}</b>`,
@@ -112,7 +139,7 @@ async function sendTelegramAlert(
     `🌐 IP: ${ip}`,
     `📍 Location: ${geo.city || '--'}, ${geo.state || '--'}, ${geo.country || '--'}`,
     '',
-    `❌ ${message}`,
+    `${detailIcon} ${message}`,
     '',
     `🕐 ${new Date().toLocaleString()}`,
   ]
@@ -121,7 +148,7 @@ async function sendTelegramAlert(
 
   // Send to Telegram
   try {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -130,9 +157,14 @@ async function sendTelegramAlert(
         parse_mode: 'HTML',
       }),
     })
-    console.log(`Telegram alert sent to ${chatId}`)
+    const result = await response.json()
+    if (result.ok) {
+      console.log(`[Telegram] Alert sent successfully to ${chatId}`)
+    } else {
+      console.error(`[Telegram] Failed to send:`, result)
+    }
   } catch (err) {
-    console.error('Failed to send Telegram alert:', err)
+    console.error('[Telegram] Error sending alert:', err)
   }
 }
 

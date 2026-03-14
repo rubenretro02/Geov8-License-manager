@@ -109,3 +109,46 @@ export async function updateTelegramSettings(data: TelegramSettings): Promise<{ 
   revalidatePath('/profile')
   return { success: true }
 }
+
+export async function sendTestTelegramMessage(chatId: string): Promise<{ success: boolean; error?: string }> {
+  // Get bot token from env or database
+  let botToken = process.env.TELEGRAM_BOT_TOKEN
+
+  if (!botToken) {
+    // Try database
+    const supabase = await createClient()
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'telegram_bot_token')
+      .single()
+    botToken = data?.value
+  }
+
+  if (!botToken) {
+    return { success: false, error: 'No Telegram bot token configured. Contact admin.' }
+  }
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: '🧪 <b>Test Message</b>\n\n✅ Your Telegram alerts are working!\n\nYou will receive notifications when license checks fail.',
+        parse_mode: 'HTML',
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!result.ok) {
+      return { success: false, error: result.description || 'Failed to send message' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error sending test message:', error)
+    return { success: false, error: 'Failed to send message' }
+  }
+}

@@ -28,7 +28,7 @@ import { toast } from 'sonner'
 import type { Profile } from '@/lib/types'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { useLanguage } from '@/lib/language-context'
-import { updateProfile, changePassword, updateTelegramSettings } from '@/lib/actions/profile'
+import { updateProfile, changePassword, updateTelegramSettings, sendTestTelegramMessage } from '@/lib/actions/profile'
 import { Switch } from '@/components/ui/switch'
 
 interface ProfileSectionProps {
@@ -57,6 +57,7 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
   const [telegramChatId, setTelegramChatId] = useState(profile.telegram_chat_id || '')
   const [telegramEnabled, setTelegramEnabled] = useState(profile.telegram_enabled || false)
   const [savingTelegram, setSavingTelegram] = useState(false)
+  const [sendingTest, setSendingTest] = useState(false)
 
   const handleSaveProfile = async () => {
     setLoading(true)
@@ -111,6 +112,22 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
       toast.error(result.error || t('errorOccurred'))
     }
     setSavingTelegram(false)
+  }
+
+  const handleSendTestMessage = async () => {
+    if (!telegramChatId) {
+      toast.error(lang === 'es' ? 'Ingresa tu Chat ID primero' : 'Enter your Chat ID first')
+      return
+    }
+    setSendingTest(true)
+    const result = await sendTestTelegramMessage(telegramChatId)
+
+    if (result.success) {
+      toast.success(lang === 'es' ? 'Mensaje enviado!' : 'Message sent!')
+    } else {
+      toast.error(result.error || t('errorOccurred'))
+    }
+    setSendingTest(false)
   }
 
   const getRoleBadge = () => {
@@ -368,6 +385,22 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
                 )}
               </Button>
             </div>
+
+            {/* Test Button */}
+            <Button
+              onClick={handleSendTestMessage}
+              disabled={sendingTest || !telegramChatId}
+              variant="outline"
+              className="w-full border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+            >
+              {sendingTest ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              {lang === 'es' ? 'Enviar Mensaje de Prueba' : 'Send Test Message'}
+            </Button>
+
             <p className="text-xs text-zinc-500">
               {lang === 'es' ? (
                 <>

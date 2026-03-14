@@ -1,16 +1,21 @@
-# TODOs - Geov8 License Manager
+# Geov8 License Manager - TODOs
 
-## En Progreso
-- [x] Crear rama `fix/hwid-validation`
-- [x] Corregir validación de HWID para que una licencia solo funcione en 1 PC
+## Completed
+- [x] Fixed middleware Supabase error
+- [x] Fixed Telegram alert status check (was checking 'error' instead of any non-'valid')
+- [x] Added better logging to sendTelegramAlert function
+- [x] Added env var support for TELEGRAM_BOT_TOKEN
+- [x] Created /api/test-telegram endpoint for debugging
 
-## Cambios Realizados
-- Verificar que el HWID se guarde correctamente antes de dar "válido"
-- Doble verificación: leer el HWID guardado para confirmar
-- Si falla el guardado, rechazar la activación con error claro
-- Agregar logs para debugging
-- Mensajes de error más claros para el usuario
+## In Progress
+- [ ] Need to add TELEGRAM_BOT_TOKEN to .env.local (waiting for user to provide)
+- [ ] Verify user's telegram_chat_id is set in profile
+- [ ] Verify license has alert_enabled = true
 
-## Pendiente
-- [ ] Hacer push de la rama al repositorio remoto
-- [ ] Crear Pull Request
+## Notes
+- User received test message but NOT license alerts
+- Possible issues:
+  1. Bot token not in .env.local
+  2. License alert_enabled not set
+  3. User telegram_enabled = false
+  4. telegram_chat_id not matching
