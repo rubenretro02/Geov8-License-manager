@@ -1,15 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
-interface NotifyRequest {
-  license_key: string
-  status?: string
-  ip?: string
-  location?: string
-  message?: string
-  chat_ids?: string
-}
-
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,88 +16,158 @@ async function getTelegramToken(): Promise<string | null> {
   } catch { return null }
 }
 
-async function getUserTelegramChatId(userId: string) {
+async function getUserTelegramChatId(userId: string): Promise<{ chatId: string | null, enabled: boolean }> {
   try {
-    const { data } = await getSupabase().from('profiles').select('telegram_chat_id, telegram_enabled').eq('id', userId).single()
-    return { chatId: data?.telegram_chat_id || null, enabled: data?.telegram_enabled || false }
-  } catch { return { chatId: null, enabled: false } }
-}
-
-async function sendTelegramMessage(botToken: string, chatId: string, text: string) {
-  await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-  })
+    const { data } = await getSupabase()
+      .from('profiles')
+      .select('telegram_chat_id, telegram_enabled')
+      .eq('id', userId)
+      .single()
+    return {
+      chatId: data?.telegram_chat_id || null,
+      enabled: data?.telegram_enabled || false
+    }
+  } catch {
+    return { chatId: null, enabled: false }
+  }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { license_key, status, ip, location, message, chat_ids }: NotifyRequest = await request.json()
-    if (!license_key) return NextResponse.json({ success: false, error: 'Missing license_key' }, { status: 400 })
+    const body = await request.json()
+    const { license_key, status, ip, location, message, chat_ids } = body
 
-    const { data: license } = await getSupabase().from('licenses').select('*').eq('license_key', license_key).single()
-    if (!license) return NextResponse.json({ success: false, error: 'License not found' }, { status: 404 })
-    
+    console.log('[Notify] Received:', { license_key, status, ip, location, message, chat_ids })
+
+    if (!license_key) {
+      return NextResponse.json({ success: false, error: 'Missing license_key' }, { status: 400 })
+    }
+
+    const supabase = getSupabase()
+
+    // Get license
+    const { data: license, error: licenseError } = await supabase
+      .from('licenses')
+      .select('*')
+      .eq('license_key', license_key)
+      .single()
+
+    if (licenseError || !license) {
+      console.log('[Notify] License not found:', license_key)
+      return NextResponse.json({ success: false, error: 'License not found' }, { status: 404 })
+    }
+
     console.log('[Notify] License found:', license.license_key)
+    console.log('[Notify] alert_enabled:', license.alert_enabled)
+    console.log('[Notify] alert_on_fail:', license.alert_on_fail)
+    console.log('[Notify] alert_on_success:', license.alert_on_success)
     console.log('[Notify] created_by:', license.created_by)
     console.log('[Notify] admin_id:', license.admin_id)
-    
-    if (!license.alert_enabled) return NextResponse.json({ success: true, message: 'Alerts disabled' })
 
-    const isError = status === 'error'
-    if (isError && !license.alert_on_fail) return NextResponse.json({ success: true })
-    if (!isError && !license.alert_on_success) return NextResponse.json({ success: true })
+    // Check if alerts enabled
+    if (!license.alert_enabled) {
+      console.log('[Notify] Alerts not enabled for this license')
+      return NextResponse.json({ success: true, message: 'Alerts disabled' })
+    }
 
+    // Check if should alert based on status
+    const isFailure = status === 'error'
+    if (isFailure && !license.alert_on_fail) {
+      console.log('[Notify] Failure alerts not enabled')
+      return NextResponse.json({ success: true, message: 'Failure alerts disabled' })
+    }
+    if (!isFailure && !license.alert_on_success) {
+      console.log('[Notify] Success alerts not enabled')
+      return NextResponse.json({ success: true, message: 'Success alerts disabled' })
+    }
+
+    // Get bot token
     const botToken = await getTelegramToken()
-    if (!botToken) return NextResponse.json({ success: false, error: 'No bot token' }, { status: 500 })
+    if (!botToken) {
+      console.log('[Notify] No bot token configured')
+      return NextResponse.json({ success: false, error: 'No bot token' }, { status: 500 })
+    }
 
-    const icon = isError ? '🔴' : '🟢'
-    const title = isError ? 'CHECK FAILED' : 'CHECK PASSED'
-    const text = `${icon} <b>${title}</b>\n\n📋 License: <code>${license.license_key}</code>\n👤 Agent: ${license.customer_name || 'Unknown'}\n🌐 IP: ${ip || '--'}\n📍 Location: ${location || '--'}\n\n${isError ? '👎' : '👍'} ${message}\n\n🕐 ${new Date().toLocaleString('es-US', { timeZone: 'America/New_York' })}`
+    // Build message
+    const icon = isFailure ? '🔴' : '🟢'
+    const title = isFailure ? 'CHECK FAILED' : 'CHECK PASSED'
+    const msgLines = [
+      `${icon} <b>${title}</b>`,
+      '',
+      `📋 License: <code>${license.license_key}</code>`,
+      `👤 Agent: ${license.customer_name || 'Unknown'}`,
+      `🌐 IP: ${ip || '--'}`,
+      `📍 Location: ${location || '--'}`,
+      '',
+      `${isFailure ? '👎' : '👍'} ${message || (isFailure ? 'Check failed' : 'Ready to work!')}`,
+      '',
+      `🕐 ${new Date().toLocaleString('es-US', { timeZone: 'America/New_York' })}`,
+    ]
+    const text = msgLines.join('\n')
 
-    // Collect all chat IDs to notify
-    const allChatIds = new Set<string>()
+    // Collect all chat IDs
+    const allChatIds: string[] = []
 
-    // Get profile chat ID (admin)
+    // 1. ADMIN chat ID (from profile)
     const ownerId = license.created_by || license.admin_id
-    
-    let profileChatId: string | null = null
-    let enabled = false
-    
-    if (ownerId) {
-      const result = await getUserTelegramChatId(ownerId)
-      profileChatId = result.chatId
-      enabled = result.enabled
-      if (profileChatId && enabled) {
-        allChatIds.add(profileChatId)
-      }
-    } else {
-      console.log('[Notify] No ownerId found - skipping profile lookup')
-    }
-
-    // Add custom chat IDs from request body
-    if (chat_ids && chat_ids.trim()) {
-      const customChatIds = chat_ids.split(',').map(id => id.trim()).filter(id => id)
-      customChatIds.forEach(id => allChatIds.add(id))
-    }
-
     console.log('[Notify] Owner ID:', ownerId)
-    console.log('[Notify] Profile chatId:', profileChatId, 'enabled:', enabled)
-    console.log('[Notify] Custom chat_ids:', chat_ids)
-    console.log('[Notify] All chat IDs to send:', Array.from(allChatIds))
 
-    // Check if we have any chat IDs to send to
-    if (allChatIds.size === 0) {
+    if (ownerId) {
+      const { chatId, enabled } = await getUserTelegramChatId(ownerId)
+      console.log('[Notify] Admin chatId:', chatId, 'enabled:', enabled)
+      
+      if (chatId && enabled) {
+        allChatIds.push(chatId)
+        console.log('[Notify] Added admin chat ID:', chatId)
+      }
+    }
+
+    // 2. AGENT chat IDs (from request - optional)
+    if (chat_ids && typeof chat_ids === 'string' && chat_ids.trim()) {
+      const agentChatIds = chat_ids.split(',').map((id: string) => id.trim()).filter((id: string) => id)
+      console.log('[Notify] Agent chat IDs:', agentChatIds)
+      
+      for (const id of agentChatIds) {
+        if (!allChatIds.includes(id)) {
+          allChatIds.push(id)
+        }
+      }
+    }
+
+    console.log('[Notify] All chat IDs to send:', allChatIds)
+
+    if (allChatIds.length === 0) {
+      console.log('[Notify] No chat IDs available')
       return NextResponse.json({ success: false, error: 'No chat IDs available' }, { status: 500 })
     }
 
-    // Send to all unique chat IDs
+    // Send to all chat IDs
+    let sentCount = 0
     for (const chatId of allChatIds) {
-      await sendTelegramMessage(botToken, chatId, text)
+      try {
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: text,
+            parse_mode: 'HTML',
+          }),
+        })
+        const result = await response.json()
+        if (result.ok) {
+          console.log('[Notify] Sent to:', chatId)
+          sentCount++
+        } else {
+          console.log('[Notify] Failed to send to:', chatId, result)
+        }
+      } catch (err) {
+        console.error('[Notify] Error sending to:', chatId, err)
+      }
     }
 
-    return NextResponse.json({ success: true, sent_to: allChatIds.size })
+    return NextResponse.json({ success: true, sent_to: sentCount })
+
   } catch (error) {
     console.error('[Notify] Error:', error)
     return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 })
