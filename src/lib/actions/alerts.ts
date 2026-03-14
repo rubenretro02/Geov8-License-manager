@@ -23,11 +23,10 @@ export async function getAlertLogs(
 
   if (!profile) return []
 
-  // STEP 1: Get ONLY licenses that have alerts enabled (filtered by role)
+  // STEP 1: Get ALL licenses for this user (for auditing - not filtered by alert_enabled)
   let licensesQuery = supabase
     .from('licenses')
-    .select('license_key, customer_name, created_by, admin_id')
-    .eq('alert_enabled', true)
+    .select('license_key, customer_name, created_by, admin_id, alert_enabled')
 
   // Filter by role
   if (profile.role === 'user') {
@@ -35,34 +34,36 @@ export async function getAlertLogs(
   } else if (profile.role === 'admin') {
     licensesQuery = licensesQuery.eq('admin_id', profile.id)
   }
-  // super_admin sees all alert-enabled licenses
+  // super_admin sees all licenses
 
-  const { data: alertLicenses, error: licensesError } = await licensesQuery
+  const { data: userLicenses, error: licensesError } = await licensesQuery
 
   if (licensesError) {
-    console.error('Error fetching alert licenses:', licensesError)
+    console.error('Error fetching licenses:', licensesError)
     return []
   }
 
-  // If no licenses have alerts enabled, return empty
-  if (!alertLicenses || alertLicenses.length === 0) {
+  if (!userLicenses || userLicenses.length === 0) {
     return []
   }
 
   // Create map for quick lookup
-  const licensesMap = new Map<string, { customer_name: string | null }>()
-  const alertLicenseKeys: string[] = []
+  const licensesMap = new Map<string, { customer_name: string | null, alert_enabled: boolean }>()
+  const licenseKeys: string[] = []
 
-  alertLicenses.forEach(l => {
-    licensesMap.set(l.license_key, { customer_name: l.customer_name })
-    alertLicenseKeys.push(l.license_key)
+  userLicenses.forEach(l => {
+    licensesMap.set(l.license_key, {
+      customer_name: l.customer_name,
+      alert_enabled: l.alert_enabled
+    })
+    licenseKeys.push(l.license_key)
   })
 
-  // STEP 2: Get check logs ONLY for licenses with alerts enabled
+  // STEP 2: Get check logs for ALL user's licenses (auditing)
   let query = supabase
     .from('check_logs')
     .select('*')
-    .in('license_key', alertLicenseKeys)
+    .in('license_key', licenseKeys)
     .order('created_at', { ascending: false })
     .limit(100)
 
@@ -97,11 +98,14 @@ export async function getAlertLogs(
     })
   }
 
-  // Map to include customer_name
-  return filteredData.map((log) => ({
-    ...log,
-    customer_name: log.license_key ? licensesMap.get(log.license_key)?.customer_name || null : null,
-  }))
+  // Map to include customer_name and alert_enabled status
+  return filteredData.map((log) => {
+    const licenseData = log.license_key ? licensesMap.get(log.license_key) : null
+    return {
+      ...log,
+      customer_name: licenseData?.customer_name || null,
+    }
+  })
 }
 
 export async function getMonitoredLicenses(): Promise<License[]> {
