@@ -50,7 +50,7 @@ export async function getAlertLogs(
   const licenseKeys = [...new Set(data.map(log => log.license_key).filter(Boolean))]
 
   // Fetch license data separately
-  let licensesMap = new Map<string, { customer_name: string | null, created_by: string | null, admin_id: string | null }>()
+  const licensesMap = new Map<string, { customer_name: string | null, created_by: string | null, admin_id: string | null }>()
 
   if (licenseKeys.length > 0) {
     const { data: licenses } = await supabase
