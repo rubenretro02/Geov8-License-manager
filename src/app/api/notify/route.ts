@@ -40,10 +40,39 @@ async function getAdminProfile(userId: string): Promise<AdminProfile | null> {
 }
 
 // Detect error type from message
-function detectErrorType(message: string | null): { isIpError: boolean; isGpsError: boolean } {
-  if (!message) return { isIpError: false, isGpsError: false }
+function detectErrorType(message: string | null, explicitType?: string): { isIpError: boolean; isGpsError: boolean; isSystemError: boolean } {
+  // If explicit type is "system", it's a system error
+  if (explicitType === 'system') {
+    return { isIpError: false, isGpsError: false, isSystemError: true }
+  }
+
+  if (!message) return { isIpError: false, isGpsError: false, isSystemError: false }
 
   const msgLower = message.toLowerCase()
+
+  // System errors - critical issues that should NEVER be filtered by IP/GPS
+  const systemErrorPatterns = [
+    'device portal',
+    'username',
+    'password',
+    'auth',
+    'connection',
+    'unavailable',
+    'injection failed',
+    'could not get',
+    'failed to',
+    'timeout',
+    'network',
+    'bad username',
+    'bad password',
+  ]
+
+  const isSystemError = systemErrorPatterns.some(pattern => msgLower.includes(pattern))
+
+  // If it's a system error, don't classify as IP or GPS
+  if (isSystemError) {
+    return { isIpError: false, isGpsError: false, isSystemError: true }
+  }
 
   const isIpError = msgLower.includes('ip:') ||
                     msgLower.includes('ip location') ||
@@ -56,13 +85,13 @@ function detectErrorType(message: string | null): { isIpError: boolean; isGpsErr
                      msgLower.includes('coordinate') ||
                      msgLower.includes('coords')
 
-  return { isIpError, isGpsError }
+  return { isIpError, isGpsError, isSystemError: false }
 }
 
 // Check if should send based on filters
 function shouldSendAlert(
   status: string,
-  errorType: { isIpError: boolean; isGpsError: boolean },
+  errorType: { isIpError: boolean; isGpsError: boolean; isSystemError: boolean },
   filters: {
     alertOnFail: boolean
     alertOnSuccess: boolean
@@ -80,8 +109,13 @@ function shouldSendAlert(
     return false
   }
 
-  // For failures, also check error type filters
+  // For failures, check error type filters
   if (isFailure) {
+    // SYSTEM ERRORS: Always send (not filtered by IP/GPS)
+    if (errorType.isSystemError) {
+      return true  // Always allow system errors through
+    }
+
     // If it's an IP error, check alert_ip
     if (errorType.isIpError && !filters.alertIp) {
       return false
@@ -173,10 +207,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No bot token' }, { status: 500 })
     }
 
-    // Detect error type
-    const detectedErrorType = error_type
-      ? { isIpError: error_type === 'ip', isGpsError: error_type === 'gps' }
-      : detectErrorType(message)
+    // Detect error type (pass explicit type if provided)
+    const detectedErrorType = detectErrorType(message, error_type)
 
     console.log('[Notify] Error type:', detectedErrorType)
 
@@ -189,7 +221,9 @@ export async function POST(request: NextRequest) {
     // Add error type indicator
     let errorTypeLabel = ''
     if (isFailure) {
-      if (detectedErrorType.isIpError && detectedErrorType.isGpsError) {
+      if (detectedErrorType.isSystemError) {
+        errorTypeLabel = ' [SYSTEM]'
+      } else if (detectedErrorType.isIpError && detectedErrorType.isGpsError) {
         errorTypeLabel = ' [IP + GPS]'
       } else if (detectedErrorType.isIpError) {
         errorTypeLabel = ' [IP]'
