@@ -17,6 +17,11 @@ export interface Profile {
   // Telegram notifications
   telegram_chat_id: string | null
   telegram_enabled: boolean
+  // Admin-level alert filters (what alerts the admin wants to receive)
+  admin_alert_on_fail: boolean
+  admin_alert_on_success: boolean
+  admin_alert_ip: boolean
+  admin_alert_gps: boolean
 }
 
 export interface CreditTransaction {
@@ -91,6 +96,13 @@ export interface Configuration {
   service_interval: string | null
   created_at: string
   updated_at: string
+  // Agent-level alert settings (from App.py)
+  telegram_enabled: boolean
+  telegram_chat_ids: string | null
+  alert_on_fail: boolean
+  alert_on_success: boolean
+  alert_ip: boolean
+  alert_gps: boolean
 }
 
 export type LicenseFormData = {

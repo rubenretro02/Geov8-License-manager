@@ -21,7 +21,11 @@ import {
   Lock,
   Bell,
   Send,
-  MessageCircle
+  MessageCircle,
+  Wifi,
+  MapPin,
+  XCircle,
+  CheckCircle
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -58,6 +62,12 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
   const [telegramEnabled, setTelegramEnabled] = useState(profile.telegram_enabled || false)
   const [savingTelegram, setSavingTelegram] = useState(false)
   const [sendingTest, setSendingTest] = useState(false)
+
+  // Admin alert filters
+  const [adminAlertOnFail, setAdminAlertOnFail] = useState(profile.admin_alert_on_fail ?? true)
+  const [adminAlertOnSuccess, setAdminAlertOnSuccess] = useState(profile.admin_alert_on_success ?? false)
+  const [adminAlertIp, setAdminAlertIp] = useState(profile.admin_alert_ip ?? true)
+  const [adminAlertGps, setAdminAlertGps] = useState(profile.admin_alert_gps ?? true)
 
   const handleSaveProfile = async () => {
     setLoading(true)
@@ -104,6 +114,10 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
     const result = await updateTelegramSettings({
       telegram_chat_id: telegramChatId,
       telegram_enabled: telegramEnabled,
+      admin_alert_on_fail: adminAlertOnFail,
+      admin_alert_on_success: adminAlertOnSuccess,
+      admin_alert_ip: adminAlertIp,
+      admin_alert_gps: adminAlertGps,
     })
 
     if (result.success) {
@@ -417,6 +431,81 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
               )}
             </p>
           </div>
+
+          {/* Admin Alert Filters */}
+          {telegramEnabled && (
+            <div className="space-y-4 pt-4 border-t border-zinc-800">
+              <div className="flex items-center gap-2 text-zinc-400 text-sm">
+                <Bell className="h-4 w-4" />
+                {lang === 'es' ? 'Filtros de Alerta (qué alertas recibir)' : 'Alert Filters (what alerts to receive)'}
+              </div>
+
+              {/* Error Types */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg border border-zinc-700">
+                  <div className="flex items-center gap-2">
+                    <Wifi className="h-4 w-4 text-blue-400" />
+                    <span className="text-sm text-white">
+                      {lang === 'es' ? 'Errores de IP' : 'IP Errors'}
+                    </span>
+                  </div>
+                  <Switch
+                    checked={adminAlertIp}
+                    onCheckedChange={setAdminAlertIp}
+                    className="data-[state=checked]:bg-blue-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg border border-zinc-700">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-emerald-400" />
+                    <span className="text-sm text-white">
+                      {lang === 'es' ? 'Errores de GPS' : 'GPS Errors'}
+                    </span>
+                  </div>
+                  <Switch
+                    checked={adminAlertGps}
+                    onCheckedChange={setAdminAlertGps}
+                    className="data-[state=checked]:bg-emerald-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg border border-zinc-700">
+                  <div className="flex items-center gap-2">
+                    <XCircle className="h-4 w-4 text-red-400" />
+                    <span className="text-sm text-white">
+                      {lang === 'es' ? 'Check Falla' : 'Check Fails'}
+                    </span>
+                  </div>
+                  <Switch
+                    checked={adminAlertOnFail}
+                    onCheckedChange={setAdminAlertOnFail}
+                    className="data-[state=checked]:bg-red-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg border border-zinc-700">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-400" />
+                    <span className="text-sm text-white">
+                      {lang === 'es' ? 'Check Exitoso' : 'Check Succeeds'}
+                    </span>
+                  </div>
+                  <Switch
+                    checked={adminAlertOnSuccess}
+                    onCheckedChange={setAdminAlertOnSuccess}
+                    className="data-[state=checked]:bg-green-500"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-500">
+                {lang === 'es'
+                  ? 'Estos filtros se aplican a TODAS tus licencias monitoreadas. Cada licencia también tiene sus propios filtros.'
+                  : 'These filters apply to ALL your monitored licenses. Each license also has its own filters.'}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
