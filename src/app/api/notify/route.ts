@@ -60,6 +60,18 @@ function detectErrorType(message: string | null): { isIpError: boolean; isGpsErr
 }
 
 // Check if should send based on filters
+// CORRECT LOGIC FOR LICENSE MANAGER:
+//
+// STEP 1: Check status filters (Fail/Success)
+//   - alert_on_fail=ON → receive errors
+//   - alert_on_success=ON → receive success
+//
+// STEP 2: Check error type filters (IP/GPS) - OPTIONAL FILTERS
+//   - IP=OFF y GPS=OFF → Receive ALL errors (no filtering by type)
+//   - IP=ON y GPS=OFF → Only IP errors
+//   - IP=OFF y GPS=ON → Only GPS errors
+//   - IP=ON y GPS=ON → All errors
+//
 function shouldSendAlert(
   status: string,
   errorType: { isIpError: boolean; isGpsError: boolean },
@@ -72,27 +84,61 @@ function shouldSendAlert(
 ): boolean {
   const isFailure = status === 'error'
 
-  // Check status filter first
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 1: Check status filter (Fail/Success)
+  // ═══════════════════════════════════════════════════════════════
   if (isFailure && !filters.alertOnFail) {
+    console.log('[Filter] Blocked: alert_on_fail is OFF')
     return false
   }
   if (!isFailure && !filters.alertOnSuccess) {
+    console.log('[Filter] Blocked: alert_on_success is OFF')
     return false
   }
 
-  // For failures, also check error type filters
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 2: For failures, check error type filters (IP/GPS)
+  // These are OPTIONAL - if both OFF, receive ALL errors
+  // ═══════════════════════════════════════════════════════════════
   if (isFailure) {
-    // If it's an IP error, check alert_ip
-    if (errorType.isIpError && !filters.alertIp) {
-      return false
+    const hasIpError = errorType.isIpError
+    const hasGpsError = errorType.isGpsError
+
+    // If BOTH filters are OFF → No filtering, receive ALL errors
+    if (!filters.alertIp && !filters.alertGps) {
+      console.log('[Filter] Allowed: Both IP/GPS filters OFF = receive all errors')
+      return true
     }
-    // If it's a GPS error, check alert_gps
-    if (errorType.isGpsError && !filters.alertGps) {
-      return false
+
+    // If we can't detect the error type (system error), allow it through
+    if (!hasIpError && !hasGpsError) {
+      console.log('[Filter] Allowed: System error (no IP/GPS detected)')
+      return true
     }
-    // If we can't detect the type, allow it through
+
+    // From here, at least one filter is ON, so we need to check
+
+    // If error has IP component and alertIp is ON → allow
+    if (hasIpError && filters.alertIp) {
+      console.log('[Filter] Allowed: IP error and alertIp ON')
+      return true
+    }
+
+    // If error has GPS component and alertGps is ON → allow
+    if (hasGpsError && filters.alertGps) {
+      console.log('[Filter] Allowed: GPS error and alertGps ON')
+      return true
+    }
+
+    // If we get here, the error type doesn't match any active filter
+    console.log('[Filter] Blocked: Error type not matching active filters')
+    console.log(`  - hasIpError=${hasIpError}, alertIp=${filters.alertIp}`)
+    console.log(`  - hasGpsError=${hasGpsError}, alertGps=${filters.alertGps}`)
+    return false
   }
 
+  // Success passed the filter
+  console.log('[Filter] Allowed: Success alert')
   return true
 }
 
@@ -174,9 +220,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Detect error type
-    const detectedErrorType = error_type
-      ? { isIpError: error_type === 'ip', isGpsError: error_type === 'gps' }
-      : detectErrorType(message)
+    // error_type can be: 'ip', 'gps', 'both', 'system', or null
+    let detectedErrorType: { isIpError: boolean; isGpsError: boolean }
+
+    if (error_type === 'ip') {
+      detectedErrorType = { isIpError: true, isGpsError: false }
+    } else if (error_type === 'gps') {
+      detectedErrorType = { isIpError: false, isGpsError: true }
+    } else if (error_type === 'both') {
+      detectedErrorType = { isIpError: true, isGpsError: true }
+    } else if (error_type === 'system') {
+      detectedErrorType = { isIpError: false, isGpsError: false } // System errors pass through
+    } else {
+      // Auto-detect from message
+      detectedErrorType = detectErrorType(message)
+    }
 
     console.log('[Notify] Error type:', detectedErrorType)
 
@@ -216,6 +274,11 @@ export async function POST(request: NextRequest) {
     let sentToAdmin = 0
 
     // ============================================
+    // DEDUPLICATION: Track chat_ids we've already sent to
+    // ============================================
+    const alreadySentTo = new Set<string>()
+
+    // ============================================
     // FLOW 1: SEND TO AGENT (independent of Manager toggle)
     // ============================================
     // The agent's chat_ids and filters come from the request (from App.py)
@@ -239,8 +302,17 @@ export async function POST(request: NextRequest) {
         const agentChatIds = chat_ids.split(',').map((id: string) => id.trim()).filter((id: string) => id)
 
         for (const chatId of agentChatIds) {
+          // DEDUPLICATION: Skip if already sent to this chat_id
+          if (alreadySentTo.has(chatId)) {
+            console.log('[Notify] Skipping duplicate (from request):', chatId)
+            continue
+          }
+
           const sent = await sendTelegramMessage(botToken, chatId, text)
-          if (sent) sentToAgent++
+          if (sent) {
+            sentToAgent++
+            alreadySentTo.add(chatId) // Mark as sent
+          }
         }
         console.log('[Notify] Sent to agent:', sentToAgent)
       } else {
@@ -249,6 +321,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Also check configurations table for agent chat_ids (by HWID)
+    // BUT SKIP if we already processed chat_ids from the request
     if (license.hwid) {
       const { data: agentConfig } = await supabase
         .from('configurations')
@@ -271,8 +344,17 @@ export async function POST(request: NextRequest) {
           const dbChatIds = agentConfig.telegram_chat_ids.split(',').map((id: string) => id.trim()).filter((id: string) => id)
 
           for (const chatId of dbChatIds) {
+            // DEDUPLICATION: Skip if already sent to this chat_id
+            if (alreadySentTo.has(chatId)) {
+              console.log('[Notify] Skipping duplicate (from DB):', chatId)
+              continue
+            }
+
             const sent = await sendTelegramMessage(botToken, chatId, text)
-            if (sent) sentToAgent++
+            if (sent) {
+              sentToAgent++
+              alreadySentTo.add(chatId) // Mark as sent
+            }
           }
         } else {
           console.log('[Notify] Agent alert (from DB) filtered out')
@@ -337,8 +419,16 @@ export async function POST(request: NextRequest) {
           console.log('[Notify] Passes admin filter:', passesAdminFilter)
 
           if (passesLicenseFilter && passesAdminFilter) {
-            const sent = await sendTelegramMessage(botToken, adminProfile.telegram_chat_id, text)
-            if (sent) sentToAdmin++
+            // DEDUPLICATION: Skip if already sent to this chat_id
+            if (alreadySentTo.has(adminProfile.telegram_chat_id)) {
+              console.log('[Notify] Skipping duplicate admin (same as agent):', adminProfile.telegram_chat_id)
+            } else {
+              const sent = await sendTelegramMessage(botToken, adminProfile.telegram_chat_id, text)
+              if (sent) {
+                sentToAdmin++
+                alreadySentTo.add(adminProfile.telegram_chat_id) // Mark as sent
+              }
+            }
           } else {
             console.log('[Notify] Admin alert filtered out')
           }
