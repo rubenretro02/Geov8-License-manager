@@ -1,21 +1,39 @@
 # Geov8 License Manager - TODOs
 
-## Completed
-- [x] Fixed middleware Supabase error
-- [x] Fixed Telegram alert status check (was checking 'error' instead of any non-'valid')
-- [x] Added better logging to sendTelegramAlert function
-- [x] Added env var support for TELEGRAM_BOT_TOKEN
-- [x] Created /api/test-telegram endpoint for debugging
+## Completado - Sistema de Alertas
 
-## In Progress
-- [ ] Need to add TELEGRAM_BOT_TOKEN to .env.local (waiting for user to provide)
-- [ ] Verify user's telegram_chat_id is set in profile
-- [ ] Verify license has alert_enabled = true
+### Fase 1: Arreglar /api/notify
+- [x] Detectar tipo de error (IP vs GPS) del mensaje
+- [x] Aplicar filtros de licencia (alert_ip, alert_gps) por tipo de error
+- [x] Separar flujo agente vs admin
+- [x] Manejar valores NULL con defaults
 
-## Notes
-- User received test message but NOT license alerts
-- Possible issues:
-  1. Bot token not in .env.local
-  2. License alert_enabled not set
-  3. User telegram_enabled = false
-  4. telegram_chat_id not matching
+### Fase 2: Filtros del Admin
+- [x] Agregar campos admin_alert_* a profiles (types.ts)
+- [x] Crear UI en profile para configurar filtros
+- [x] Aplicar filtros del admin en /api/notify
+- [x] Actualizar profile.ts para guardar filtros
+
+### Fase 3: Página Alerts
+- [x] Agregar botón Settings para editar filtros desde la lista
+- [x] Mostrar badges con valores por defecto correctos
+
+### Fase 4: App Python
+- [x] Agregar UI de filtros en Settings (checkboxes)
+- [x] Guardar filtros en save_config
+- [x] Cargar filtros en load_config
+- [x] Enviar filtros a /api/notify
+- [x] Detectar y enviar error_type (ip/gps) al endpoint
+
+### Fase 5: Database
+- [x] Crear supabase_migration.sql para agregar columnas
+
+## Pendiente - Usuario debe ejecutar
+- [ ] Ejecutar supabase_migration.sql en Supabase SQL Editor
+- [ ] Agregar TELEGRAM_BOT_TOKEN a .env.local si no existe
+
+## Notas
+- El flujo del agente es independiente del Manager (toggle propio)
+- El admin tiene sus propios filtros globales en su perfil
+- Cada licencia tiene filtros individuales
+- Los valores NULL se manejan con defaults correctos

@@ -83,6 +83,11 @@ export async function changePassword(newPassword: string): Promise<{ success: bo
 interface TelegramSettings {
   telegram_chat_id: string
   telegram_enabled: boolean
+  // Admin-level alert filters
+  admin_alert_on_fail?: boolean
+  admin_alert_on_success?: boolean
+  admin_alert_ip?: boolean
+  admin_alert_gps?: boolean
 }
 
 export async function updateTelegramSettings(data: TelegramSettings): Promise<{ success: boolean; error?: string }> {
@@ -93,12 +98,28 @@ export async function updateTelegramSettings(data: TelegramSettings): Promise<{ 
     return { success: false, error: 'No autorizado' }
   }
 
+  const updateData: Record<string, unknown> = {
+    telegram_chat_id: data.telegram_chat_id || null,
+    telegram_enabled: data.telegram_enabled,
+  }
+
+  // Add admin filters if provided
+  if (data.admin_alert_on_fail !== undefined) {
+    updateData.admin_alert_on_fail = data.admin_alert_on_fail
+  }
+  if (data.admin_alert_on_success !== undefined) {
+    updateData.admin_alert_on_success = data.admin_alert_on_success
+  }
+  if (data.admin_alert_ip !== undefined) {
+    updateData.admin_alert_ip = data.admin_alert_ip
+  }
+  if (data.admin_alert_gps !== undefined) {
+    updateData.admin_alert_gps = data.admin_alert_gps
+  }
+
   const { error } = await supabase
     .from('profiles')
-    .update({
-      telegram_chat_id: data.telegram_chat_id || null,
-      telegram_enabled: data.telegram_enabled,
-    })
+    .update(updateData)
     .eq('id', user.id)
 
   if (error) {

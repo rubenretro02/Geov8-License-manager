@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
-import { AlertTriangle, CheckCircle, RefreshCw, Bell, Filter, BellRing, Wifi, MapPin, Eye } from 'lucide-react'
+import { AlertTriangle, CheckCircle, RefreshCw, Bell, Filter, BellRing, Wifi, MapPin, Eye, Settings } from 'lucide-react'
+import { AlertSettingsDialog } from '@/components/dashboard/alert-settings-dialog'
 import { getAlertLogs, getMonitoredLicenses } from '@/lib/actions/alerts'
 import { updateLicenseAlerts } from '@/lib/actions/licenses'
 import { toast } from 'sonner'
@@ -25,6 +26,10 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
   const [filter, setFilter] = useState<'all' | 'error' | 'success'>('all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'ip' | 'gps'>('all')
   const [activeTab, setActiveTab] = useState('logs')
+
+  // Alert settings dialog
+  const [selectedLicense, setSelectedLicense] = useState<License | null>(null)
+  const [alertDialogOpen, setAlertDialogOpen] = useState(false)
 
   const loadAlerts = useCallback(async () => {
     setLoading(true)
@@ -261,22 +266,22 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                           <code className="text-xs text-emerald-400">{license.license_key}</code>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3">
                         {/* Alert types badges */}
                         <div className="flex gap-2">
-                          {license.alert_ip && (
+                          {(license.alert_ip ?? true) && (
                             <Badge className="bg-blue-500/20 text-blue-400 text-xs">
                               <Wifi className="w-3 h-3 mr-1" />
                               IP
                             </Badge>
                           )}
-                          {license.alert_gps && (
+                          {(license.alert_gps ?? true) && (
                             <Badge className="bg-emerald-500/20 text-emerald-400 text-xs">
                               <MapPin className="w-3 h-3 mr-1" />
                               GPS
                             </Badge>
                           )}
-                          {license.alert_on_fail && (
+                          {(license.alert_on_fail ?? true) && (
                             <Badge className="bg-red-500/20 text-red-400 text-xs">
                               Fail
                             </Badge>
@@ -287,6 +292,18 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                             </Badge>
                           )}
                         </div>
+                        {/* Edit button */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedLicense(license)
+                            setAlertDialogOpen(true)
+                          }}
+                          className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-700"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </Button>
                         {/* Toggle switch */}
                         <Switch
                           checked={license.alert_enabled || false}
@@ -302,6 +319,20 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Alert Settings Dialog */}
+      {selectedLicense && (
+        <AlertSettingsDialog
+          license={selectedLicense}
+          open={alertDialogOpen}
+          onOpenChange={(open) => {
+            setAlertDialogOpen(open)
+            if (!open) {
+              loadMonitoredLicenses() // Refresh after closing
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
