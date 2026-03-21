@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -28,12 +28,25 @@ export function AlertSettingsDialog({ license, open, onOpenChange }: AlertSettin
   const { lang } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [settings, setSettings] = useState({
-    alert_enabled: license.alert_enabled || false,
-    alert_ip: license.alert_ip ?? true,
-    alert_gps: license.alert_gps ?? true,
-    alert_on_fail: license.alert_on_fail ?? true,
-    alert_on_success: license.alert_on_success ?? false,
+    alert_enabled: false,
+    alert_ip: false,
+    alert_gps: false,
+    alert_on_fail: false,
+    alert_on_success: false,
   })
+
+  // Reset settings when license changes or dialog opens
+  useEffect(() => {
+    if (open) {
+      setSettings({
+        alert_enabled: license.alert_enabled || false,
+        alert_ip: license.alert_ip ?? false,
+        alert_gps: license.alert_gps ?? false,
+        alert_on_fail: license.alert_on_fail ?? false,
+        alert_on_success: license.alert_on_success ?? false,
+      })
+    }
+  }, [license.license_key, open])
 
   const handleSave = async () => {
     setLoading(true)
