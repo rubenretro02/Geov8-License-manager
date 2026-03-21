@@ -38,12 +38,16 @@ export function AlertSettingsDialog({ license, open, onOpenChange }: AlertSettin
   // Reset settings when license changes or dialog opens
   useEffect(() => {
     if (open) {
+      // If license was never configured (alert_enabled = false), show all filters as OFF
+      // If license was already configured, show the saved values
+      const wasConfigured = license.alert_enabled === true
+
       setSettings({
         alert_enabled: license.alert_enabled || false,
-        alert_ip: license.alert_ip ?? false,
-        alert_gps: license.alert_gps ?? false,
-        alert_on_fail: license.alert_on_fail ?? false,
-        alert_on_success: license.alert_on_success ?? false,
+        alert_ip: wasConfigured ? (license.alert_ip ?? false) : false,
+        alert_gps: wasConfigured ? (license.alert_gps ?? false) : false,
+        alert_on_fail: wasConfigured ? (license.alert_on_fail ?? false) : false,
+        alert_on_success: wasConfigured ? (license.alert_on_success ?? false) : false,
       })
     }
   }, [license.license_key, open])
