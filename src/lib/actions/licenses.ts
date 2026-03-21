@@ -193,12 +193,12 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
     daysValid = 5 // Default 5 days for trials if not specified
   }
 
-  // Get alert settings from formData (with defaults)
+  // Get alert settings from formData (with defaults - all OFF by default)
   const alertSettings = {
     alert_enabled: 'alert_enabled' in formData ? (formData as Record<string, unknown>).alert_enabled : false,
-    alert_ip: 'alert_ip' in formData ? (formData as Record<string, unknown>).alert_ip : true,
-    alert_gps: 'alert_gps' in formData ? (formData as Record<string, unknown>).alert_gps : true,
-    alert_on_fail: 'alert_on_fail' in formData ? (formData as Record<string, unknown>).alert_on_fail : true,
+    alert_ip: 'alert_ip' in formData ? (formData as Record<string, unknown>).alert_ip : false,
+    alert_gps: 'alert_gps' in formData ? (formData as Record<string, unknown>).alert_gps : false,
+    alert_on_fail: 'alert_on_fail' in formData ? (formData as Record<string, unknown>).alert_on_fail : false,
     alert_on_success: 'alert_on_success' in formData ? (formData as Record<string, unknown>).alert_on_success : false,
   }
 
