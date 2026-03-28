@@ -132,6 +132,17 @@ export async function updateTelegramSettings(data: TelegramSettings): Promise<{ 
 }
 
 export async function sendTestTelegramMessage(chatId: string): Promise<{ success: boolean; error?: string }> {
+  // Validate chat ID
+  if (!chatId || chatId.trim() === '') {
+    return { success: false, error: 'Please enter your Chat ID first' }
+  }
+
+  // Chat ID should be a number
+  const cleanChatId = chatId.trim()
+  if (!/^-?\d+$/.test(cleanChatId)) {
+    return { success: false, error: 'Chat ID must be a number. Get it from @userinfobot on Telegram' }
+  }
+
   // Get bot token from env or database
   let botToken = process.env.TELEGRAM_BOT_TOKEN
 
@@ -155,7 +166,7 @@ export async function sendTestTelegramMessage(chatId: string): Promise<{ success
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: chatId,
+        chat_id: cleanChatId,
         text: '🧪 <b>Test Message</b>\n\n✅ Your Telegram alerts are working!\n\nYou will receive notifications when license checks fail.',
         parse_mode: 'HTML',
       }),
@@ -164,12 +175,25 @@ export async function sendTestTelegramMessage(chatId: string): Promise<{ success
     const result = await response.json()
 
     if (!result.ok) {
+      // Provide more helpful error messages
+      if (result.description?.includes('chat not found')) {
+        return {
+          success: false,
+          error: 'Chat not found. Please: 1) Search for the bot on Telegram, 2) Send /start to the bot, 3) Try again'
+        }
+      }
+      if (result.description?.includes('bot was blocked')) {
+        return {
+          success: false,
+          error: 'You blocked the bot. Unblock it on Telegram and try again'
+        }
+      }
       return { success: false, error: result.description || 'Failed to send message' }
     }
 
     return { success: true }
   } catch (error) {
     console.error('Error sending test message:', error)
-    return { success: false, error: 'Failed to send message' }
+    return { success: false, error: 'Connection error. Please try again' }
   }
 }

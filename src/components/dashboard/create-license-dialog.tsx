@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -23,9 +23,10 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Loader2, Copy, Check, Coins, FlaskConical, AlertCircle, Bell, Infinity } from 'lucide-react'
+import { Plus, Loader2, Copy, Check, Coins, FlaskConical } from 'lucide-react'
 import { AlertSettings } from './alert-settings'
 import { createLicense } from '@/lib/actions/licenses'
+import { getCreditsInfoForDisplay } from '@/lib/actions/credits'
 import { toast } from 'sonner'
 import { useLanguage } from '@/lib/language-context'
 import type { Profile } from '@/lib/types'
@@ -41,12 +42,21 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
   const [createdKey, setCreatedKey] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
+  // Credits info (fetched from admin for users)
+  const [creditsInfo, setCreditsInfo] = useState<{
+    credits: number
+    trialsRemaining: number | null
+    trialLimit: number | null
+    trialsUsed: number
+  }>({ credits: 0, trialsRemaining: null, trialLimit: null, trialsUsed: 0 })
+
   const [formData, setFormData] = useState({
     customer_name: '',
     customer_email: '',
     days_valid: 30,
     is_paid: false,
     is_trial: false,
+    is_permanent: false,
     payment_amount: 50,
     payment_method: 'paypal',
     notes: '',
@@ -58,8 +68,12 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
     alert_on_success: false,
   })
 
-  // When trial is toggled, adjust days if needed
-  const MAX_TRIAL_DAYS = 5
+  // Fetch credits info when dialog opens
+  useEffect(() => {
+    if (open && profile && profile.role !== 'super_admin') {
+      getCreditsInfoForDisplay().then(setCreditsInfo)
+    }
+  }, [open, profile])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,6 +81,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
 
     const result = await createLicense({
       ...formData,
+      days_valid: formData.is_permanent ? 0 : formData.days_valid,
       is_paid: formData.is_trial ? false : formData.is_paid,
     })
 
@@ -95,6 +110,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
       days_valid: 30,
       is_paid: false,
       is_trial: false,
+      is_permanent: false,
       payment_amount: 50,
       payment_method: 'paypal',
       notes: '',
@@ -108,14 +124,18 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
     setCopied(false)
   }
 
-  // Check if it's a permanent license
-  const isPermanent = !formData.is_trial && formData.days_valid === 0
-
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen)
     if (!newOpen) {
       resetForm()
     }
+  }
+
+  // Calculate credits cost
+  const getCreditsCost = () => {
+    if (formData.is_trial) return 0
+    if (formData.is_permanent) return 300
+    return formData.days_valid
   }
 
   return (
@@ -138,12 +158,12 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
             <div className="flex flex-wrap gap-2 mt-3">
               <Badge className="bg-amber-500/20 text-amber-400 gap-1">
                 <Coins className="h-3 w-3" />
-                {profile.credits || 0} credits
+                {creditsInfo.credits} credits
               </Badge>
               <Badge className="bg-purple-500/20 text-purple-400 gap-1">
                 <FlaskConical className="h-3 w-3" />
-                {profile.trial_limit && profile.trial_limit > 0
-                  ? `${Math.max(0, profile.trial_limit - (profile.trials_used_this_month || 0))} trials remaining`
+                {creditsInfo.trialsRemaining !== null
+                  ? `${creditsInfo.trialsRemaining} trials remaining`
                   : 'Unlimited trials'}
               </Badge>
             </div>
@@ -216,60 +236,8 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
               </div>
             </div>
 
-            {/* License Type Options */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Trial Option */}
-              <button
-                type="button"
-                onClick={() => setFormData({
-                  ...formData,
-                  is_trial: true,
-                  is_paid: false,
-                  days_valid: Math.min(formData.days_valid || 5, 5)
-                })}
-                className={`p-4 rounded-xl border transition-all text-left ${
-                  formData.is_trial
-                    ? 'bg-purple-500/20 border-purple-500/50'
-                    : 'bg-zinc-800/50 border-zinc-700 hover:border-zinc-600'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <FlaskConical className={`h-4 w-4 ${formData.is_trial ? 'text-purple-400' : 'text-zinc-500'}`} />
-                  <p className={`font-medium ${formData.is_trial ? 'text-purple-400' : 'text-white'}`}>
-                    {t('isTrial')}
-                  </p>
-                </div>
-                <p className="text-xs text-zinc-500">{t('freeTrialPeriod')} (max 5 days)</p>
-                <Badge className="mt-2 bg-purple-500/20 text-purple-400">Free</Badge>
-              </button>
-
-              {/* Permanent Option */}
-              <button
-                type="button"
-                onClick={() => setFormData({
-                  ...formData,
-                  is_trial: false,
-                  days_valid: 0
-                })}
-                className={`p-4 rounded-xl border transition-all text-left ${
-                  !formData.is_trial && formData.days_valid === 0
-                    ? 'bg-amber-500/20 border-amber-500/50'
-                    : 'bg-zinc-800/50 border-zinc-700 hover:border-zinc-600'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Infinity className={`h-4 w-4 ${!formData.is_trial && formData.days_valid === 0 ? 'text-amber-400' : 'text-zinc-500'}`} />
-                  <p className={`font-medium ${!formData.is_trial && formData.days_valid === 0 ? 'text-amber-400' : 'text-white'}`}>
-                    {t('permanent')}
-                  </p>
-                </div>
-                <p className="text-xs text-zinc-500">Never expires</p>
-                <Badge className="mt-2 bg-amber-500/20 text-amber-400">300 credits</Badge>
-              </button>
-            </div>
-
-            {/* Days selector - only shown for trial or timed licenses */}
-            {(formData.is_trial || formData.days_valid > 0) && (
+            {/* Days Valid */}
+            {!formData.is_permanent && (
               <div className="space-y-2">
                 <Label htmlFor="days" className="text-zinc-300">
                   {t('daysValid')} {formData.is_trial ? '(max. 5 days)' : ''}
@@ -290,7 +258,6 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
                 />
                 <div className="flex flex-wrap gap-2 mt-2">
                   {formData.is_trial ? (
-                    // Trial days: 1-5
                     [1, 2, 3, 4, 5].map((d) => (
                       <Button
                         key={d}
@@ -308,7 +275,6 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
                       </Button>
                     ))
                   ) : (
-                    // Regular days: 7, 15, 30, etc.
                     [7, 15, 30, 60, 90, 365].map((d) => (
                       <Button
                         key={d}
@@ -330,17 +296,39 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
               </div>
             )}
 
-            {/* Show option to switch to timed license when permanent is selected */}
-            {!formData.is_trial && formData.days_valid === 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setFormData({ ...formData, days_valid: 30 })}
-                className="w-full border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
-              >
-                Or create a timed license instead
-              </Button>
-            )}
+            {/* Trial License Toggle */}
+            <div className="flex items-center justify-between p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+              <div>
+                <p className="text-white font-medium">{t('isTrial')}</p>
+                <p className="text-xs text-zinc-500">{t('freeTrialPeriod')} (max 5 days)</p>
+              </div>
+              <Switch
+                checked={formData.is_trial}
+                onCheckedChange={(checked) => setFormData({
+                  ...formData,
+                  is_trial: checked,
+                  is_permanent: checked ? false : formData.is_permanent,
+                  is_paid: checked ? false : formData.is_paid,
+                  days_valid: checked ? Math.min(formData.days_valid || 5, 5) : formData.days_valid
+                })}
+              />
+            </div>
+
+            {/* Permanent License Toggle */}
+            <div className="flex items-center justify-between p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <div>
+                <p className="text-white font-medium">{t('permanent')}</p>
+                <p className="text-xs text-zinc-500">Never expires (300 credits)</p>
+              </div>
+              <Switch
+                checked={formData.is_permanent}
+                onCheckedChange={(checked) => setFormData({
+                  ...formData,
+                  is_permanent: checked,
+                  is_trial: checked ? false : formData.is_trial,
+                })}
+              />
+            </div>
 
             {/* Payment Option - Hidden if trial */}
             {!formData.is_trial && (
@@ -420,22 +408,20 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
               <div className={`flex items-center justify-between p-3 rounded-xl ${
                 formData.is_trial
                   ? 'bg-purple-500/10 border border-purple-500/20'
-                  : isPermanent
+                  : formData.is_permanent
                     ? 'bg-amber-500/10 border border-amber-500/20'
                     : 'bg-emerald-500/10 border border-emerald-500/20'
               }`}>
                 <div className="flex items-center gap-2">
                   {formData.is_trial ? (
                     <FlaskConical className="h-4 w-4 text-purple-400" />
-                  ) : isPermanent ? (
-                    <Infinity className="h-4 w-4 text-amber-400" />
                   ) : (
-                    <Coins className="h-4 w-4 text-emerald-400" />
+                    <Coins className="h-4 w-4 text-amber-400" />
                   )}
                   <span className="text-sm text-white">
                     {formData.is_trial
                       ? 'Trial License'
-                      : isPermanent
+                      : formData.is_permanent
                         ? 'Permanent License'
                         : `${formData.days_valid}-Day License`}
                   </span>
@@ -443,15 +429,13 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
                 <Badge className={
                   formData.is_trial
                     ? 'bg-purple-500/20 text-purple-400'
-                    : isPermanent
+                    : formData.is_permanent
                       ? 'bg-amber-500/20 text-amber-400'
                       : 'bg-emerald-500/20 text-emerald-400'
                 }>
                   {formData.is_trial
                     ? 'Free'
-                    : isPermanent
-                      ? '300 credits'
-                      : `${formData.days_valid} credits`}
+                    : `${getCreditsCost()} credits`}
                 </Badge>
               </div>
             )}
