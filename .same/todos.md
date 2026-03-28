@@ -37,3 +37,48 @@
 - El admin tiene sus propios filtros globales en su perfil
 - Cada licencia tiene filtros individuales
 - Los valores NULL se manejan con defaults correctos
+
+## Mejoras al Sistema de Licencias
+
+### Tareas Completadas
+
+- [x] 1. Sistema de créditos sin decimales:
+  - Crear licencia de 30 días = 30 créditos
+  - Eliminar licencia = devolver créditos no usados (días restantes)
+  - Si usó 5 días = devolver solo (días_restantes) créditos
+  - Licencias permanentes = 300 créditos
+
+- [x] 2. Bug trial license:
+  - Corregido: trial_limit de 0 o null ahora significa ilimitado
+  - El admin homevpn ahora puede crear trials sin límite
+
+- [x] 3. Botón de crear licencia permanente:
+  - Añadido botón "Permanent" en el diálogo de creación de licencias
+  - Muestra badge con "300 credits" como costo
+
+- [x] 4. Botón "Save Configuration":
+  - Botón renombrado a "Save Configuration" / "Guardar Configuración"
+  - Movido al fondo de la sección de Telegram Notifications
+
+## Cambios realizados
+
+### credits.ts
+- `calculateCreditsForDays`: 1 crédito = 1 día (sin decimales)
+- Licencias permanentes = 300 créditos
+- Corregida lógica de trial_limit (0 = ilimitado)
+
+### licenses.ts
+- Refunds calculados sin decimales
+- Mensajes actualizados
+
+### create-license-dialog.tsx
+- Añadido botón de licencia permanente
+- UI mejorada con grid de opciones (Trial / Permanent)
+- Indicador de créditos actualizado
+
+### profile-section.tsx
+- Botón "Save Configuration" movido al fondo
+- Texto claro para evitar confusión
+
+### renew-dialog.tsx
+- Añadido indicador de costo de créditos

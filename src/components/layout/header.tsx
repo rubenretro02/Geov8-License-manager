@@ -151,7 +151,9 @@ export function Header({ user, profile }: HeaderProps) {
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-500/10 rounded-lg border border-purple-500/20">
                   <FlaskConical className="h-4 w-4 text-purple-400" />
                   <span className="text-sm font-medium text-purple-400">
-                    {(profile.trial_limit || 0) - (profile.trials_used_this_month || 0)}
+                    {profile.trial_limit && profile.trial_limit > 0
+                      ? Math.max(0, profile.trial_limit - (profile.trials_used_this_month || 0))
+                      : '∞'}
                   </span>
                 </div>
               </div>

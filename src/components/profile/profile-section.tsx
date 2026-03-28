@@ -322,7 +322,7 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
                   {t('trialsUsedThisMonth')}
                 </div>
                 <p className="text-3xl font-bold text-purple-400">
-                  {profile.trials_used_this_month || 0} / {profile.trial_limit || 0}
+                  {profile.trials_used_this_month || 0} / {profile.trial_limit && profile.trial_limit > 0 ? profile.trial_limit : (lang === 'es' ? 'Ilimitado' : 'Unlimited')}
                 </p>
               </div>
               <div className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
@@ -331,7 +331,9 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
                   {t('trialsRemaining')}
                 </div>
                 <p className="text-3xl font-bold text-emerald-400">
-                  {(profile.trial_limit || 0) - (profile.trials_used_this_month || 0)}
+                  {profile.trial_limit && profile.trial_limit > 0
+                    ? Math.max(0, profile.trial_limit - (profile.trials_used_this_month || 0))
+                    : (lang === 'es' ? 'Ilimitado' : 'Unlimited')}
                 </p>
               </div>
             </div>
@@ -380,25 +382,12 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
               <MessageCircle className="h-4 w-4" />
               Chat ID
             </Label>
-            <div className="flex gap-2">
-              <Input
-                value={telegramChatId}
-                onChange={(e) => setTelegramChatId(e.target.value)}
-                placeholder="123456789"
-                className="bg-zinc-800 border-zinc-700 text-white flex-1"
-              />
-              <Button
-                onClick={handleSaveTelegram}
-                disabled={savingTelegram}
-                className="bg-blue-500 hover:bg-blue-600 text-white"
-              >
-                {savingTelegram ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Check className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
+            <Input
+              value={telegramChatId}
+              onChange={(e) => setTelegramChatId(e.target.value)}
+              placeholder="123456789"
+              className="bg-zinc-800 border-zinc-700 text-white"
+            />
 
             {/* Test Button */}
             <Button
@@ -506,6 +495,22 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
               </p>
             </div>
           )}
+
+          {/* Save Configuration Button - at the bottom */}
+          <div className="pt-4 border-t border-zinc-800">
+            <Button
+              onClick={handleSaveTelegram}
+              disabled={savingTelegram}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
+            >
+              {savingTelegram ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4 mr-2" />
+              )}
+              {lang === 'es' ? 'Guardar Configuración' : 'Save Configuration'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
