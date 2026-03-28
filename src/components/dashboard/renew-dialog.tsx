@@ -12,7 +12,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Clock, Loader2 } from 'lucide-react'
+import { Clock, Loader2, Coins } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import type { License } from '@/lib/types'
 import { renewLicense } from '@/lib/actions/licenses'
 import { toast } from 'sonner'
@@ -107,6 +108,19 @@ export function RenewDialog({ license, open, onOpenChange }: RenewDialogProps) {
                 {d}d
               </Button>
             ))}
+          </div>
+
+          {/* Credit cost indicator */}
+          <div className="flex items-center justify-between p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+            <div className="flex items-center gap-2">
+              <Coins className="h-4 w-4 text-emerald-400" />
+              <span className="text-sm text-white">
+                {lang === 'es' ? 'Costo de renovación' : 'Renewal cost'}
+              </span>
+            </div>
+            <Badge className="bg-emerald-500/20 text-emerald-400">
+              {parseInt(days) || 0} credits
+            </Badge>
           </div>
         </div>
 

@@ -129,10 +129,10 @@ export async function setTrialLimit(
   return { success: true }
 }
 
-// Calculate proportional credits for a given number of days (1 credit = 30 days)
+// Calculate credits for a given number of days (1 credit = 1 day, no decimals)
 export async function calculateCreditsForDays(daysValid: number, isPermanent: boolean): Promise<number> {
-  if (isPermanent) return 10
-  return Math.round((daysValid / 30) * 100) / 100 // Round to 2 decimals
+  if (isPermanent) return 300 // Permanent licenses cost 300 credits
+  return Math.floor(daysValid) // 1 credit per day, no decimals
 }
 
 // Deduct credits for license creation
@@ -158,17 +158,20 @@ export async function deductCreditsForLicense(
 
   // Handle trial licenses
   if (isTrial) {
-    if (updatedProfile.trials_used_this_month >= (updatedProfile.trial_limit || 0)) {
+    // trial_limit of 0 or null means unlimited trials
+    const hasLimit = updatedProfile.trial_limit !== null && updatedProfile.trial_limit > 0
+
+    if (hasLimit && updatedProfile.trials_used_this_month >= updatedProfile.trial_limit) {
       return {
         success: false,
-        error: `Trial limit reached (${updatedProfile.trial_limit || 0}/month). Contact administrator.`
+        error: `Trial limit reached (${updatedProfile.trial_limit}/month). Contact administrator.`
       }
     }
 
     // Increment trials used
     await supabase
       .from('profiles')
-      .update({ trials_used_this_month: updatedProfile.trials_used_this_month + 1 })
+      .update({ trials_used_this_month: (updatedProfile.trials_used_this_month || 0) + 1 })
       .eq('id', profile.id)
 
     return { success: true, creditsDeducted: 0 }
@@ -184,8 +187,8 @@ export async function deductCreditsForLicense(
     }
   }
 
-  // Deduct credits
-  const newBalance = Math.round(((updatedProfile.credits || 0) - creditsNeeded) * 100) / 100
+  // Deduct credits (no decimals)
+  const newBalance = Math.floor((updatedProfile.credits || 0) - creditsNeeded)
 
   const { error } = await supabase
     .from('profiles')

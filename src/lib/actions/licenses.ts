@@ -318,8 +318,8 @@ export async function renewLicense(
       }
     }
 
-    // Deduct credits
-    const newBalance = Math.round(((profile.credits || 0) - creditsNeeded) * 100) / 100
+    // Deduct credits (no decimals)
+    const newBalance = Math.floor((profile.credits || 0) - creditsNeeded)
     const { error: creditError } = await supabase
       .from('profiles')
       .update({ credits: newBalance })
@@ -440,7 +440,8 @@ export async function deleteLicense(licenseKey: string): Promise<{ success: bool
         .single()
 
       if (creatorProfile) {
-        const newBalance = Math.round(((creatorProfile.credits || 0) + creditsRefunded) * 100) / 100
+        // No decimals in credits
+        const newBalance = Math.floor((creatorProfile.credits || 0) + creditsRefunded)
 
         await supabase
           .from('profiles')
