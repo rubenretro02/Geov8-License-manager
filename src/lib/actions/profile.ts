@@ -99,7 +99,7 @@ export async function updateTelegramSettings(data: TelegramSettings): Promise<{ 
   }
 
   const updateData: Record<string, unknown> = {
-    telegram_chat_id: data.telegram_chat_id || null,
+    telegram_chat_id: data.telegram_chat_id?.trim() || null,
     telegram_enabled: data.telegram_enabled,
   }
 
@@ -117,15 +117,20 @@ export async function updateTelegramSettings(data: TelegramSettings): Promise<{ 
     updateData.admin_alert_gps = data.admin_alert_gps
   }
 
-  const { error } = await supabase
+  console.log('[updateTelegramSettings] Updating for user:', user.id, 'Data:', updateData)
+
+  const { error, data: result } = await supabase
     .from('profiles')
     .update(updateData)
     .eq('id', user.id)
+    .select()
 
   if (error) {
-    console.error('Error updating telegram settings:', error)
+    console.error('[updateTelegramSettings] Error:', error)
     return { success: false, error: error.message }
   }
+
+  console.log('[updateTelegramSettings] Success, updated rows:', result?.length)
 
   revalidatePath('/profile')
   return { success: true }
