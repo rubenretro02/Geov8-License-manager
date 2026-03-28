@@ -133,7 +133,26 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
       toast.error(lang === 'es' ? 'Ingresa tu Chat ID primero' : 'Enter your Chat ID first')
       return
     }
+
     setSendingTest(true)
+
+    // First, save the chat ID to ensure it's stored
+    const saveResult = await updateTelegramSettings({
+      telegram_chat_id: telegramChatId,
+      telegram_enabled: telegramEnabled,
+      admin_alert_on_fail: adminAlertOnFail,
+      admin_alert_on_success: adminAlertOnSuccess,
+      admin_alert_ip: adminAlertIp,
+      admin_alert_gps: adminAlertGps,
+    })
+
+    if (!saveResult.success) {
+      toast.error(lang === 'es' ? 'Error guardando Chat ID' : 'Error saving Chat ID')
+      setSendingTest(false)
+      return
+    }
+
+    // Then send the test message
     const result = await sendTestTelegramMessage(telegramChatId)
 
     if (result.success) {
@@ -404,21 +423,38 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
               {lang === 'es' ? 'Enviar Mensaje de Prueba' : 'Send Test Message'}
             </Button>
 
-            <p className="text-xs text-zinc-500">
+            <div className="text-xs text-zinc-500 space-y-2">
+              <p className="font-medium text-zinc-400">
+                {lang === 'es' ? 'Cómo obtener tu Chat ID:' : 'How to get your Chat ID:'}
+              </p>
               {lang === 'es' ? (
-                <>
-                  Para obtener tu Chat ID:
-                  <br />1. Abre Telegram y busca @userinfobot
-                  <br />2. Envía /start y te dará tu ID
-                </>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Abre Telegram en tu teléfono o computadora</li>
+                  <li>Busca <span className="text-blue-400">@userinfobot</span> y abre el chat</li>
+                  <li>Envía /start</li>
+                  <li>El bot responderá con tu info incluyendo "Id: 123456789"</li>
+                  <li>Copia ese número (tu Chat ID)</li>
+                  <li>Pégalo en el campo de arriba</li>
+                  <li>Activa el switch para recibir alertas</li>
+                </ol>
               ) : (
-                <>
-                  To get your Chat ID:
-                  <br />1. Open Telegram and search @userinfobot
-                  <br />2. Send /start and it will give you your ID
-                </>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Open Telegram app on your phone or desktop</li>
+                  <li>Search for <span className="text-blue-400">@userinfobot</span> and open the chat</li>
+                  <li>Click START or send /start</li>
+                  <li>The bot will reply with your info including "Id: 123456789"</li>
+                  <li>Copy that number (your Chat ID)</li>
+                  <li>Paste it in the field above</li>
+                  <li>Enable the toggle switch to receive alerts</li>
+                </ol>
               )}
-            </p>
+              <p className="text-amber-400/80 mt-2">
+                {lang === 'es'
+                  ? <>Después, busca <span className="text-blue-400">@geoalerts_bot</span> y envía /start para permitir que te envíe notificaciones.</>
+                  : <>After setup, search for <span className="text-blue-400">@geoalerts_bot</span> and click START to allow it to send you notifications.</>
+                }
+              </p>
+            </div>
           </div>
 
           {/* Admin Alert Filters */}
