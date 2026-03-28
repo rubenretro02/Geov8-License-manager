@@ -54,6 +54,26 @@ export async function getProfileWithCredits(userId: string): Promise<Profile | n
   return await checkAndResetTrials(data)
 }
 
+// Get the admin profile for a user (for credits/trials)
+async function getAdminProfileForUser(profile: Profile): Promise<Profile | null> {
+  if (profile.role === 'admin') {
+    return profile
+  }
+
+  if (profile.role === 'user' && profile.admin_id) {
+    const supabase = await createClient()
+    const { data: adminProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', profile.admin_id)
+      .single()
+
+    return adminProfile || null
+  }
+
+  return null
+}
+
 // Add credits to a reseller (super_admin only)
 export async function addCredits(
   profileId: string,
@@ -136,6 +156,7 @@ export async function calculateCreditsForDays(daysValid: number, isPermanent: bo
 }
 
 // Deduct credits for license creation
+// IMPORTANT: Users use their admin's credits and trial limits
 export async function deductCreditsForLicense(
   isPermanent: boolean,
   isTrial: boolean,
@@ -153,58 +174,73 @@ export async function deductCreditsForLicense(
     return { success: true, creditsDeducted: 0 }
   }
 
-  // Check and reset trials if needed
-  const updatedProfile = await checkAndResetTrials(profile)
+  // For Users, get their admin's profile for credits/trials
+  // For Admins, use their own profile
+  let creditProfile: Profile | null = null
+
+  if (profile.role === 'user') {
+    creditProfile = await getAdminProfileForUser(profile)
+    if (!creditProfile) {
+      return { success: false, error: 'Admin not found. Contact administrator.' }
+    }
+  } else {
+    creditProfile = profile
+  }
+
+  // Check and reset trials if needed (on the admin's profile)
+  const updatedCreditProfile = await checkAndResetTrials(creditProfile)
 
   // Handle trial licenses
   if (isTrial) {
     // trial_limit of 0 or null means unlimited trials
-    const hasLimit = updatedProfile.trial_limit !== null && updatedProfile.trial_limit > 0
+    const hasLimit = updatedCreditProfile.trial_limit !== null && updatedCreditProfile.trial_limit > 0
 
-    if (hasLimit && updatedProfile.trials_used_this_month >= updatedProfile.trial_limit) {
+    if (hasLimit && (updatedCreditProfile.trials_used_this_month || 0) >= updatedCreditProfile.trial_limit) {
       return {
         success: false,
-        error: `Trial limit reached (${updatedProfile.trial_limit}/month). Contact administrator.`
+        error: `Trial limit reached (${updatedCreditProfile.trial_limit}/month). Contact administrator.`
       }
     }
 
-    // Increment trials used
+    // Increment trials used on the ADMIN's profile (not the user's)
     await supabase
       .from('profiles')
-      .update({ trials_used_this_month: (updatedProfile.trials_used_this_month || 0) + 1 })
-      .eq('id', profile.id)
+      .update({ trials_used_this_month: (updatedCreditProfile.trials_used_this_month || 0) + 1 })
+      .eq('id', creditProfile.id)
 
     return { success: true, creditsDeducted: 0 }
   }
 
-  // Calculate credits needed proportionally (1 credit = 30 days)
+  // Calculate credits needed
   const creditsNeeded = await calculateCreditsForDays(daysValid, isPermanent)
 
-  if ((updatedProfile.credits || 0) < creditsNeeded) {
+  if ((updatedCreditProfile.credits || 0) < creditsNeeded) {
     return {
       success: false,
-      error: `Insufficient credits. You need ${creditsNeeded} credit(s), you have ${updatedProfile.credits || 0}.`
+      error: `Insufficient credits. You need ${creditsNeeded} credit(s), available: ${updatedCreditProfile.credits || 0}.`
     }
   }
 
-  // Deduct credits (no decimals)
-  const newBalance = Math.floor((updatedProfile.credits || 0) - creditsNeeded)
+  // Deduct credits from the ADMIN's profile (not the user's)
+  const newBalance = Math.floor((updatedCreditProfile.credits || 0) - creditsNeeded)
 
   const { error } = await supabase
     .from('profiles')
     .update({ credits: newBalance })
-    .eq('id', profile.id)
+    .eq('id', creditProfile.id)
 
   if (error) {
     return { success: false, error: error.message }
   }
 
-  // Record transaction
+  // Record transaction (on the admin's profile)
   await supabase.from('credit_transactions').insert({
-    profile_id: profile.id,
+    profile_id: creditProfile.id,
     amount: -creditsNeeded,
     type: isPermanent ? 'license_permanent' : 'license_30d',
-    description: isPermanent ? 'Permanent license created' : `License created (${daysValid} days = ${creditsNeeded} credits)`,
+    description: isPermanent
+      ? `Permanent license created by ${profile.username || profile.email}`
+      : `License created (${daysValid} days) by ${profile.username || profile.email}`,
     created_by: profile.id,
   })
 
@@ -307,5 +343,38 @@ export async function getCreditStats() {
     totalCredits: currentProfile.credits || 0,
     totalTransactions: 0,
     creditsUsedThisMonth: 0,
+  }
+}
+
+// Get the credits info that a user should see (their admin's credits if they're a user)
+export async function getCreditsInfoForDisplay(): Promise<{ credits: number; trialsRemaining: number | null; trialLimit: number | null; trialsUsed: number }> {
+  const profile = await getCurrentProfile()
+
+  if (!profile) {
+    return { credits: 0, trialsRemaining: null, trialLimit: null, trialsUsed: 0 }
+  }
+
+  if (profile.role === 'super_admin') {
+    return { credits: 999999, trialsRemaining: null, trialLimit: null, trialsUsed: 0 }
+  }
+
+  // For users, get admin's credits
+  let creditProfile = profile
+  if (profile.role === 'user' && profile.admin_id) {
+    const adminProfile = await getAdminProfileForUser(profile)
+    if (adminProfile) {
+      creditProfile = adminProfile
+    }
+  }
+
+  const trialLimit = creditProfile.trial_limit
+  const trialsUsed = creditProfile.trials_used_this_month || 0
+  const trialsRemaining = trialLimit && trialLimit > 0 ? Math.max(0, trialLimit - trialsUsed) : null
+
+  return {
+    credits: creditProfile.credits || 0,
+    trialsRemaining,
+    trialLimit,
+    trialsUsed,
   }
 }

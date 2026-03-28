@@ -158,8 +158,8 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
     return { success: false, error: 'Unauthorized' }
   }
 
-  const isTrial = 'is_trial' in formData ? (formData as LicenseFormData & { is_trial?: boolean }).is_trial : false
-  const isPermanent = formData.days_valid === 0
+  const isTrial = formData.is_trial || false
+  const isPermanent = formData.is_permanent || formData.days_valid === 0
 
   // Check credits/trials BEFORE creating license (skip for super_admin)
   if (profile.role !== 'super_admin') {

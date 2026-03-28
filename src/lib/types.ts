@@ -110,6 +110,8 @@ export type LicenseFormData = {
   customer_email: string
   days_valid: number
   is_paid: boolean
+  is_trial?: boolean
+  is_permanent?: boolean
   payment_amount: number
   payment_method: string
   notes: string
