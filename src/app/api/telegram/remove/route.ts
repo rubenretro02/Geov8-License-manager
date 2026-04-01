@@ -191,17 +191,19 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // Get license info from licenses table using hardware_id
+        // Get license info from licenses table using hwid
         let licenseInfo: { name?: string; key?: string; whatsapp?: string } = {}
         const { data: license } = await supabase
           .from('licenses')
-          .select('name, key, whatsapp')
-          .eq('hardware_id', hardware_id)
+          .select('customer_name, key, whatsapp')
+          .eq('hwid', hardware_id)
           .single()
+
+        console.log('[Remove] License lookup:', { hardware_id, license })
 
         if (license) {
           licenseInfo = {
-            name: license.name,
+            name: license.customer_name,
             key: license.key,
             whatsapp: license.whatsapp
           }

@@ -44,6 +44,7 @@ import { RenewDialog } from './renew-dialog'
 import { PaymentDialog } from './payment-dialog'
 import { LicenseDetailsDialog } from './license-details-dialog'
 import { AlertSettingsDialog } from './alert-settings-dialog'
+import { EditLicenseDialog } from './edit-license-dialog'
 import { useLanguage } from '@/lib/language-context'
 
 import { UserCircle } from 'lucide-react'
@@ -62,6 +63,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
   const [alertSettingsDialogOpen, setAlertSettingsDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
 
@@ -345,6 +347,16 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
                           <DropdownMenuItem
                             onClick={() => {
                               setSelectedLicense(license)
+                              setEditDialogOpen(true)
+                            }}
+                            className="text-zinc-300 focus:text-white focus:bg-zinc-800"
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            {lang === 'es' ? 'Editar' : 'Edit'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedLicense(license)
                               setAlertSettingsDialogOpen(true)
                             }}
                             className="text-zinc-300 focus:text-white focus:bg-zinc-800"
@@ -440,6 +452,11 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
             license={selectedLicense}
             open={alertSettingsDialogOpen}
             onOpenChange={setAlertSettingsDialogOpen}
+          />
+          <EditLicenseDialog
+            license={selectedLicense}
+            open={editDialogOpen}
+            onOpenChange={setEditDialogOpen}
           />
         </>
       )}
