@@ -152,25 +152,38 @@ export async function POST(request: NextRequest) {
 
     // Remove from configurations (App.py)
     if (hardware_id) {
-      const { data: config } = await supabase
+      const { data: config, error: configError } = await supabase
         .from('configurations')
         .select('telegram_chat_ids, license_key')
         .eq('hardware_id', hardware_id)
         .single()
 
-      if (config && config.telegram_chat_ids) {
-        const currentIds = config.telegram_chat_ids
+      console.log('[Remove] Config lookup:', { hardware_id, config, configError })
+
+      if (config) {
+        const chatIdsString = config.telegram_chat_ids || ''
+        const currentIds = chatIdsString
           .split(',')
           .map((id: string) => id.trim())
-          .filter((id: string) => id !== chat_id)
+          .filter((id: string) => id && id !== chat_id)
 
-        await supabase
+        console.log('[Remove] Updating chat_ids:', { before: chatIdsString, after: currentIds.join(',') })
+
+        const { error: updateError } = await supabase
           .from('configurations')
           .update({
             telegram_chat_ids: currentIds.join(','),
             telegram_enabled: currentIds.length > 0,
           })
           .eq('hardware_id', hardware_id)
+
+        if (updateError) {
+          console.error('[Remove] Update error:', updateError)
+          return NextResponse.json(
+            { success: false, error: 'Failed to update configuration' },
+            { status: 500 }
+          )
+        }
 
         // Get license info if available
         let licenseInfo: { name?: string; key?: string } = {}
@@ -197,6 +210,8 @@ export async function POST(request: NextRequest) {
           ip: ip,
           country: country,
         })
+      } else {
+        console.log('[Remove] No config found for hardware_id:', hardware_id)
       }
     }
 
