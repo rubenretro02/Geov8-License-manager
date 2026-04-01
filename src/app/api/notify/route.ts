@@ -282,8 +282,8 @@ export async function POST(request: NextRequest) {
     const inlineKeyboard = license.phone_number ? {
       inline_keyboard: [[
         {
-          text: `📞 WhatsApp: ${license.phone_number}`,
-          url: `https://wa.me/${license.phone_number.replace(/[^0-9]/g, '')}`
+          text: `📞 ${license.phone_number}`,
+          url: `whatsapp://send?phone=${license.phone_number.replace(/[^0-9]/g, '')}`
         }
       ]]
     } : undefined
