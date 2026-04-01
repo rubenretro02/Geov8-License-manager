@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
     if (hardware_id) {
       const { data: config, error: configError } = await supabase
         .from('configurations')
-        .select('telegram_chat_ids, license_key')
+        .select('telegram_chat_ids')
         .eq('hardware_id', hardware_id)
         .single()
 
@@ -185,27 +185,13 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // Get license info if available
-        let licenseInfo: { name?: string; key?: string } = {}
-        if (config.license_key) {
-          const { data: license } = await supabase
-            .from('licenses')
-            .select('name, key')
-            .eq('key', config.license_key)
-            .single()
-
-          if (license) {
-            licenseInfo = { name: license.name, key: license.key }
-          }
-        }
-
         // Send disconnect notification with all details
         await sendDisconnectNotification({
           chatId: chat_id,
           disconnectedBy: disconnected_by || 'Agent',
           source: 'app',
-          licenseKey: license_key || licenseInfo.key || config.license_key,
-          licenseName: license_name || licenseInfo.name,
+          licenseKey: license_key,
+          licenseName: license_name,
           hardwareId: hardware_id,
           ip: ip,
           country: country,
