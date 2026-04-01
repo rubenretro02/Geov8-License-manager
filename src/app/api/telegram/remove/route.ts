@@ -17,6 +17,7 @@ interface DisconnectInfo {
   hardwareId?: string      // Hardware ID if from app
   ip?: string              // IP address
   country?: string         // Country
+  whatsapp?: string        // WhatsApp contact number
 }
 
 async function sendDisconnectNotification(info: DisconnectInfo) {
@@ -70,6 +71,11 @@ async function sendDisconnectNotification(info: DisconnectInfo) {
     }
 
     message += `🕐 <b>Time:</b> ${timestamp} UTC\n`
+
+    if (info.whatsapp) {
+      message += `\n📞 <b>Contact:</b> <a href="https://wa.me/${info.whatsapp.replace(/[^0-9]/g, '')}">${info.whatsapp}</a>\n`
+    }
+
     message += `━━━━━━━━━━━━━━━━━━━━━\n\n`
     message += `⚠️ You will no longer receive notifications on this account.`
 
@@ -185,16 +191,33 @@ export async function POST(request: NextRequest) {
           )
         }
 
+        // Get license info from licenses table using hardware_id
+        let licenseInfo: { name?: string; key?: string; whatsapp?: string } = {}
+        const { data: license } = await supabase
+          .from('licenses')
+          .select('name, key, whatsapp')
+          .eq('hardware_id', hardware_id)
+          .single()
+
+        if (license) {
+          licenseInfo = {
+            name: license.name,
+            key: license.key,
+            whatsapp: license.whatsapp
+          }
+        }
+
         // Send disconnect notification with all details
         await sendDisconnectNotification({
           chatId: chat_id,
           disconnectedBy: disconnected_by || 'Agent',
           source: 'app',
-          licenseKey: license_key,
-          licenseName: license_name,
+          licenseKey: license_key || licenseInfo.key,
+          licenseName: license_name || licenseInfo.name,
           hardwareId: hardware_id,
           ip: ip,
           country: country,
+          whatsapp: licenseInfo.whatsapp,
         })
       } else {
         console.log('[Remove] No config found for hardware_id:', hardware_id)
