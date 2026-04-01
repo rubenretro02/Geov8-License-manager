@@ -40,7 +40,7 @@ export interface License {
   license_key: string
   customer_name: string | null
   customer_email: string | null
-  whatsapp: string | null
+  phone_number: string | null
   hwid: string | null
   is_active: boolean
   is_paid: boolean

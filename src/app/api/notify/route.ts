@@ -269,10 +269,10 @@ export async function POST(request: NextRequest) {
       `🕐 ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}`,
     ]
 
-    // Add WhatsApp contact if available
-    if (license.whatsapp) {
+    // Add contact if available
+    if (license.phone_number) {
       msgLines.push('')
-      msgLines.push(`📞 Contact: <a href="https://wa.me/${license.whatsapp.replace(/[^0-9]/g, '')}">${license.whatsapp}</a>`)
+      msgLines.push(`📞 Contact: <a href="https://wa.me/${license.phone_number.replace(/[^0-9]/g, '')}">${license.phone_number}</a>`)
     }
     const text = msgLines.join('\n')
 

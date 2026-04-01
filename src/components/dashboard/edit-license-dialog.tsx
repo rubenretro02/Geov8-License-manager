@@ -28,7 +28,7 @@ export function EditLicenseDialog({ license, open, onOpenChange }: EditLicenseDi
   const [formData, setFormData] = useState({
     customer_name: '',
     customer_email: '',
-    whatsapp: '',
+    phone_number: '',
   })
 
   // Reset form when dialog opens with new license
@@ -37,7 +37,7 @@ export function EditLicenseDialog({ license, open, onOpenChange }: EditLicenseDi
       setFormData({
         customer_name: license.customer_name || '',
         customer_email: license.customer_email || '',
-        whatsapp: license.whatsapp || '',
+        phone_number: license.phone_number || '',
       })
     }
   }, [open, license])
@@ -50,7 +50,7 @@ export function EditLicenseDialog({ license, open, onOpenChange }: EditLicenseDi
       const result = await updateLicense(license.license_key, {
         customer_name: formData.customer_name || null,
         customer_email: formData.customer_email || null,
-        whatsapp: formData.whatsapp || null,
+        phone_number: formData.phone_number || null,
       })
 
       if (result.success) {
@@ -115,22 +115,22 @@ export function EditLicenseDialog({ license, open, onOpenChange }: EditLicenseDi
             />
           </div>
 
-          {/* WhatsApp */}
+          {/* Phone Number */}
           <div className="space-y-2">
             <Label className="text-zinc-300 flex items-center gap-2">
               <Phone className="h-4 w-4" />
-              WhatsApp
+              {lang === 'es' ? 'Teléfono / WhatsApp' : 'Phone / WhatsApp'}
             </Label>
             <Input
-              value={formData.whatsapp}
-              onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
+              value={formData.phone_number}
+              onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
               placeholder="+1234567890"
               className="bg-zinc-800 border-zinc-700 text-white"
             />
             <p className="text-xs text-zinc-500">
               {lang === 'es'
-                ? 'Incluye el código de país (ej: +1 para USA)'
-                : 'Include country code (e.g., +1 for USA)'}
+                ? 'Incluye el código de país. Se usará para contacto por WhatsApp.'
+                : 'Include country code. Will be used for WhatsApp contact.'}
             </p>
           </div>
 

@@ -17,7 +17,7 @@ interface DisconnectInfo {
   hardwareId?: string      // Hardware ID if from app
   ip?: string              // IP address
   country?: string         // Country
-  whatsapp?: string        // WhatsApp contact number
+  phone?: string           // Phone number for contact
 }
 
 async function sendDisconnectNotification(info: DisconnectInfo) {
@@ -72,8 +72,8 @@ async function sendDisconnectNotification(info: DisconnectInfo) {
 
     message += `🕐 <b>Time:</b> ${timestamp} UTC\n`
 
-    if (info.whatsapp) {
-      message += `\n📞 <b>Contact:</b> <a href="https://wa.me/${info.whatsapp.replace(/[^0-9]/g, '')}">${info.whatsapp}</a>\n`
+    if (info.phone) {
+      message += `\n📞 <b>Contact:</b> <a href="https://wa.me/${info.phone.replace(/[^0-9]/g, '')}">${info.phone}</a>\n`
     }
 
     message += `━━━━━━━━━━━━━━━━━━━━━\n\n`
@@ -192,10 +192,10 @@ export async function POST(request: NextRequest) {
         }
 
         // Get license info from licenses table using hwid
-        let licenseInfo: { name?: string; key?: string; whatsapp?: string } = {}
+        let licenseInfo: { name?: string; key?: string; phone?: string } = {}
         const { data: license } = await supabase
           .from('licenses')
-          .select('customer_name, license_key, whatsapp')
+          .select('customer_name, license_key, phone_number')
           .eq('hwid', hardware_id)
           .single()
 
@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
           licenseInfo = {
             name: license.customer_name,
             key: license.license_key,
-            whatsapp: license.whatsapp
+            phone: license.phone_number
           }
         }
 
@@ -219,7 +219,7 @@ export async function POST(request: NextRequest) {
           hardwareId: hardware_id,
           ip: ip,
           country: country,
-          whatsapp: licenseInfo.whatsapp,
+          phone: licenseInfo.phone,
         })
       } else {
         console.log('[Remove] No config found for hardware_id:', hardware_id)
