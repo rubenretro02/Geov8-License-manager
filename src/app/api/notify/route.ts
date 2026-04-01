@@ -145,17 +145,24 @@ function shouldSendAlert(
 async function sendTelegramMessage(
   botToken: string,
   chatId: string,
-  text: string
+  text: string,
+  replyMarkup?: { inline_keyboard: Array<Array<{ text: string; url: string }>> }
 ): Promise<boolean> {
   try {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      text: text,
+      parse_mode: 'HTML',
+    }
+
+    if (replyMarkup) {
+      body.reply_markup = replyMarkup
+    }
+
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: 'HTML',
-      }),
+      body: JSON.stringify(body),
     })
     const result = await response.json()
     if (result.ok) {
@@ -269,12 +276,17 @@ export async function POST(request: NextRequest) {
       `🕐 ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}`,
     ]
 
-    // Add contact if available
-    if (license.phone_number) {
-      msgLines.push('')
-      msgLines.push(`📞 Contact: <a href="https://wa.me/${license.phone_number.replace(/[^0-9]/g, '')}">${license.phone_number}</a>`)
-    }
     const text = msgLines.join('\n')
+
+    // Build inline keyboard for WhatsApp button if phone available
+    const inlineKeyboard = license.phone_number ? {
+      inline_keyboard: [[
+        {
+          text: `📞 WhatsApp: ${license.phone_number}`,
+          url: `https://wa.me/${license.phone_number.replace(/[^0-9]/g, '')}`
+        }
+      ]]
+    } : undefined
 
     let sentToAgent = 0
     let sentToAdmin = 0
@@ -314,7 +326,7 @@ export async function POST(request: NextRequest) {
             continue
           }
 
-          const sent = await sendTelegramMessage(botToken, chatId, text)
+          const sent = await sendTelegramMessage(botToken, chatId, text, inlineKeyboard)
           if (sent) {
             sentToAgent++
             alreadySentTo.add(chatId) // Mark as sent
@@ -356,7 +368,7 @@ export async function POST(request: NextRequest) {
               continue
             }
 
-            const sent = await sendTelegramMessage(botToken, chatId, text)
+            const sent = await sendTelegramMessage(botToken, chatId, text, inlineKeyboard)
             if (sent) {
               sentToAgent++
               alreadySentTo.add(chatId) // Mark as sent
@@ -429,7 +441,7 @@ export async function POST(request: NextRequest) {
             if (alreadySentTo.has(adminProfile.telegram_chat_id)) {
               console.log('[Notify] Skipping duplicate admin (same as agent):', adminProfile.telegram_chat_id)
             } else {
-              const sent = await sendTelegramMessage(botToken, adminProfile.telegram_chat_id, text)
+              const sent = await sendTelegramMessage(botToken, adminProfile.telegram_chat_id, text, inlineKeyboard)
               if (sent) {
                 sentToAdmin++
                 alreadySentTo.add(adminProfile.telegram_chat_id) // Mark as sent

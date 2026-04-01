@@ -71,22 +71,32 @@ async function sendDisconnectNotification(info: DisconnectInfo) {
     }
 
     message += `🕐 <b>Time:</b> ${timestamp} UTC\n`
-
-    if (info.phone) {
-      message += `\n📞 <b>Contact:</b> <a href="https://wa.me/${info.phone.replace(/[^0-9]/g, '')}">${info.phone}</a>\n`
-    }
-
     message += `━━━━━━━━━━━━━━━━━━━━━\n\n`
     message += `⚠️ You will no longer receive notifications on this account.`
+
+    // Build request body
+    const body: Record<string, unknown> = {
+      chat_id: info.chatId,
+      text: message,
+      parse_mode: 'HTML',
+    }
+
+    // Add WhatsApp button if phone available
+    if (info.phone) {
+      body.reply_markup = {
+        inline_keyboard: [[
+          {
+            text: `📞 WhatsApp: ${info.phone}`,
+            url: `https://wa.me/${info.phone.replace(/[^0-9]/g, '')}`
+          }
+        ]]
+      }
+    }
 
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: info.chatId,
-        text: message,
-        parse_mode: 'HTML',
-      }),
+      body: JSON.stringify(body),
     })
   } catch (error) {
     console.error('[Remove] Error sending disconnect notification:', error)
