@@ -86,8 +86,8 @@ async function sendDisconnectNotification(info: DisconnectInfo) {
       body.reply_markup = {
         inline_keyboard: [[
           {
-            text: `📞 ${info.phone}`,
-            url: `whatsapp://send?phone=${info.phone.replace(/[^0-9]/g, '')}`
+            text: `📞 WhatsApp: ${info.phone}`,
+            url: `https://wa.me/${info.phone.replace(/[^0-9]/g, '')}`
           }
         ]]
       }
