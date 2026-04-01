@@ -268,6 +268,12 @@ export async function POST(request: NextRequest) {
       '',
       `🕐 ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}`,
     ]
+
+    // Add WhatsApp contact if available
+    if (license.whatsapp) {
+      msgLines.push('')
+      msgLines.push(`📞 Contact: <a href="https://wa.me/${license.whatsapp.replace(/[^0-9]/g, '')}">${license.whatsapp}</a>`)
+    }
     const text = msgLines.join('\n')
 
     let sentToAgent = 0

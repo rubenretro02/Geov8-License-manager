@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
         let licenseInfo: { name?: string; key?: string; whatsapp?: string } = {}
         const { data: license } = await supabase
           .from('licenses')
-          .select('customer_name, key, whatsapp')
+          .select('customer_name, license_key, whatsapp')
           .eq('hwid', hardware_id)
           .single()
 
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
         if (license) {
           licenseInfo = {
             name: license.customer_name,
-            key: license.key,
+            key: license.license_key,
             whatsapp: license.whatsapp
           }
         }
