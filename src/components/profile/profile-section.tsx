@@ -29,8 +29,10 @@ import {
   Plus,
   Trash2,
   ExternalLink,
-  RefreshCw
+  RefreshCw,
+  Smartphone
 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import type { Profile } from '@/lib/types'
@@ -584,25 +586,49 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
                   </Button>
                 </div>
 
-                <div className="text-center space-y-3">
+                <div className="text-center space-y-4">
                   <p className="text-sm text-zinc-300">
                     {lang === 'es'
-                      ? 'Haz clic en el botón para abrir Telegram y conectar tu cuenta:'
-                      : 'Click the button to open Telegram and connect your account:'}
+                      ? 'Escanea el código QR o haz clic en el botón para conectar tu cuenta:'
+                      : 'Scan the QR code or click the button to connect your account:'}
                   </p>
-                  <a
-                    href={linkData.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
-                  >
-                    <Send className="h-4 w-4" />
-                    {lang === 'es' ? 'Abrir en Telegram' : 'Open in Telegram'}
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
+
+                  {/* QR Code */}
+                  <div className="flex justify-center">
+                    <div className="p-4 bg-white rounded-xl shadow-lg">
+                      <QRCodeSVG
+                        value={linkData.link}
+                        size={180}
+                        level="M"
+                        includeMargin={false}
+                        bgColor="#ffffff"
+                        fgColor="#000000"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Code Label */}
                   <p className="text-xs text-zinc-500">
-                    {lang === 'es' ? 'Código:' : 'Code:'} <code className="text-blue-400">{linkData.code}</code>
+                    {lang === 'es' ? 'Código:' : 'Code:'} <code className="text-blue-400 font-mono">{linkData.code}</code>
                   </p>
+
+                  {/* Desktop Option */}
+                  <div className="pt-2 border-t border-zinc-700/50">
+                    <p className="text-xs text-zinc-500 mb-3 flex items-center justify-center gap-2">
+                      <Smartphone className="h-3 w-3" />
+                      {lang === 'es' ? 'O abre en la app de escritorio:' : 'Or open in desktop app:'}
+                    </p>
+                    <a
+                      href={linkData.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
+                    >
+                      <Send className="h-4 w-4" />
+                      {lang === 'es' ? 'Abrir Telegram Desktop' : 'Open Telegram Desktop'}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
                 </div>
               </div>
             ) : (

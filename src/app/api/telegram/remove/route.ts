@@ -8,6 +8,25 @@ function getSupabase() {
   )
 }
 
+async function sendDisconnectNotification(chatId: string, username?: string) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN
+  if (!botToken) return
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: `🔌 <b>Disconnected</b>\n\nYour Telegram has been disconnected from GeoAlerts${username ? ` (${username})` : ''}.\n\nYou will no longer receive notifications on this account.`,
+        parse_mode: 'HTML',
+      }),
+    })
+  } catch (error) {
+    console.error('[Remove] Error sending disconnect notification:', error)
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -28,16 +47,18 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabase()
+    let username: string | undefined
 
     // Remove from profiles (web app)
     if (user_id) {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('telegram_chat_ids, telegram_chat_id')
+        .select('telegram_chat_ids, telegram_chat_id, username')
         .eq('id', user_id)
         .single()
 
       if (profile) {
+        username = profile.username
         const currentIds: string[] = profile.telegram_chat_ids || []
         const updatedIds = currentIds.filter(id => id !== chat_id)
 
@@ -53,6 +74,9 @@ export async function POST(request: NextRequest) {
             telegram_enabled: updatedIds.length > 0,
           })
           .eq('id', user_id)
+
+        // Send disconnect notification to the removed chat
+        await sendDisconnectNotification(chat_id, username)
       }
     }
 
@@ -77,6 +101,9 @@ export async function POST(request: NextRequest) {
             telegram_enabled: currentIds.length > 0,
           })
           .eq('hardware_id', hardware_id)
+
+        // Send disconnect notification to the removed chat
+        await sendDisconnectNotification(chat_id)
       }
     }
 

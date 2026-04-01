@@ -172,7 +172,7 @@ export async function sendTestTelegramMessage(chatId: string): Promise<{ success
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: cleanChatId,
-        text: '🧪 <b>Test Message</b>\n\n✅ Your Telegram alerts are working!\n\nYou will receive notifications when license checks fail.',
+        text: '🧪 <b>Test Message</b>\n\n✅ Your Telegram alerts are working!\n\nYou can successfully receive notifications!',
         parse_mode: 'HTML',
       }),
     })

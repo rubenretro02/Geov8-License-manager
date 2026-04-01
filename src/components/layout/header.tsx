@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from '@/lib/actions/auth'
@@ -14,7 +14,24 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
-import { Shield, LogOut, User, Key, Users, Globe, Activity, Coins, FlaskConical, Download, Loader2, Bell } from 'lucide-react'
+import {
+  Shield,
+  LogOut,
+  User,
+  Key,
+  Users,
+  Globe,
+  Activity,
+  Coins,
+  FlaskConical,
+  Download,
+  Loader2,
+  Bell,
+  Copy,
+  Check,
+  ChevronDown,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/types'
@@ -29,13 +46,14 @@ export function Header({ user, profile }: HeaderProps) {
   const pathname = usePathname()
   const { lang, setLang, t } = useLanguage()
   const [downloading, setDownloading] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
 
   const handleSignOut = async () => {
     await signOut()
   }
 
-  const handleDownload = async () => {
-    setDownloading(true)
+  const getDownloadInfo = async (): Promise<{ url: string; version: string } | null> => {
     try {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -46,16 +64,58 @@ export function Header({ user, profile }: HeaderProps) {
         .single()
 
       if (error || !data?.download_url) {
-        alert('No download available')
-        return
+        return null
       }
 
-      window.open(data.download_url, '_blank')
+      return { url: data.download_url, version: data.version }
+    } catch (err) {
+      console.error('Error getting download info:', err)
+      return null
+    }
+  }
+
+  // Load app version on mount
+  useEffect(() => {
+    const loadVersion = async () => {
+      const info = await getDownloadInfo()
+      if (info) {
+        setAppVersion(info.version)
+      }
+    }
+    loadVersion()
+  }, [])
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      const info = await getDownloadInfo()
+      if (!info) {
+        toast.error(lang === 'es' ? 'No hay descarga disponible' : 'No download available')
+        return
+      }
+      window.open(info.url, '_blank')
     } catch (err) {
       console.error('Download error:', err)
-      alert('Failed to get download link')
+      toast.error(lang === 'es' ? 'Error al descargar' : 'Failed to download')
     } finally {
       setDownloading(false)
+    }
+  }
+
+  const handleCopyLink = async () => {
+    try {
+      const info = await getDownloadInfo()
+      if (!info) {
+        toast.error(lang === 'es' ? 'No hay link disponible' : 'No link available')
+        return
+      }
+      await navigator.clipboard.writeText(info.url)
+      setCopied(true)
+      toast.success(lang === 'es' ? 'Link copiado!' : 'Link copied!')
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Copy error:', err)
+      toast.error(lang === 'es' ? 'Error al copiar' : 'Failed to copy')
     }
   }
 
@@ -123,19 +183,54 @@ export function Header({ user, profile }: HeaderProps) {
                 </Button>
               </Link>
             ))}
-            <Button
-              onClick={handleDownload}
-              disabled={downloading}
-              variant="ghost"
-              className="gap-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
-            >
-              {downloading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              {t('downloadApp')}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="gap-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                >
+                  <Download className="w-4 h-4" />
+                  {t('downloadApp')}
+                  <ChevronDown className="w-3 h-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="bg-zinc-900 border-zinc-800 min-w-[180px]">
+                {/* Version Header */}
+                <div className="px-2 py-2 border-b border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-500">
+                      {lang === 'es' ? 'Versión' : 'Version'}
+                    </span>
+                    <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                      {appVersion || '...'}
+                    </Badge>
+                  </div>
+                </div>
+                <DropdownMenuItem
+                  onClick={handleDownload}
+                  disabled={downloading}
+                  className="text-zinc-300 focus:text-white focus:bg-zinc-800 cursor-pointer mt-1"
+                >
+                  {downloading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4 mr-2" />
+                  )}
+                  {lang === 'es' ? 'Descargar' : 'Download'}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleCopyLink}
+                  className="text-zinc-300 focus:text-white focus:bg-zinc-800 cursor-pointer"
+                >
+                  {copied ? (
+                    <Check className="w-4 h-4 mr-2 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-4 h-4 mr-2" />
+                  )}
+                  {lang === 'es' ? 'Copiar Link' : 'Copy Link'}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </nav>
         </div>
 
