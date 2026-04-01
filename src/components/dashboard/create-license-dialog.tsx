@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Loader2, Copy, Check, Coins, FlaskConical } from 'lucide-react'
+import { Plus, Loader2, Copy, Check, Coins, FlaskConical, Phone } from 'lucide-react'
 import { AlertSettings } from './alert-settings'
 import { createLicense } from '@/lib/actions/licenses'
 import { getCreditsInfoForDisplay } from '@/lib/actions/credits'
@@ -36,7 +36,7 @@ interface CreateLicenseDialogProps {
 }
 
 export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [createdKey, setCreatedKey] = useState<string | null>(null)
@@ -53,6 +53,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
   const [formData, setFormData] = useState({
     customer_name: '',
     customer_email: '',
+    phone_number: '',
     days_valid: 30,
     is_paid: false,
     is_trial: false,
@@ -107,6 +108,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
     setFormData({
       customer_name: '',
       customer_email: '',
+      phone_number: '',
       days_valid: 30,
       is_paid: false,
       is_trial: false,
@@ -153,7 +155,6 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
             {t('generateNewLicense')}
           </DialogDescription>
 
-          {/* Credit/Trial Info for non-super_admin */}
           {profile && profile.role !== 'super_admin' && (
             <div className="flex flex-wrap gap-2 mt-3">
               <Badge className="bg-amber-500/20 text-amber-400 gap-1">
@@ -234,6 +235,31 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
                   className="bg-zinc-800 border-zinc-700 text-white"
                 />
               </div>
+            </div>
+
+            {/* Phone Number for WhatsApp */}
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="text-zinc-300 flex items-center gap-2">
+                <Phone className="h-3 w-3" />
+                {lang === 'es' ? 'WhatsApp (opcional)' : 'WhatsApp (optional)'}
+              </Label>
+              <Input
+                id="phone"
+                type="tel"
+                value={formData.phone_number}
+                onChange={(e) => {
+                  // Only allow numbers, +, spaces, and dashes
+                  const value = e.target.value.replace(/[^0-9+\-\s]/g, '')
+                  setFormData({ ...formData, phone_number: value })
+                }}
+                placeholder="+1 234 567 8900"
+                className="bg-zinc-800 border-zinc-700 text-white"
+              />
+              <p className="text-xs text-zinc-500">
+                {lang === 'es'
+                  ? 'Incluye el código de país. Se usará para contacto rápido en alertas.'
+                  : 'Include country code. Used for quick contact in alerts.'}
+              </p>
             </div>
 
             {/* Days Valid */}
@@ -393,7 +419,6 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
               />
             </div>
 
-            {/* Alert Settings */}
             <AlertSettings
               enabled={formData.alert_enabled}
               alertIp={formData.alert_ip}
@@ -403,7 +428,6 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
               onChange={(settings) => setFormData({ ...formData, ...settings })}
             />
 
-            {/* Credit Cost Indicator */}
             {profile && profile.role !== 'super_admin' && (
               <div className={`flex items-center justify-between p-3 rounded-xl ${
                 formData.is_trial
