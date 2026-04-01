@@ -584,26 +584,37 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
                   </Button>
                 </div>
 
-                <div className="text-center space-y-3">
-                  <p className="text-sm text-zinc-300">
-                    {lang === 'es'
-                      ? 'Haz clic en el botón para abrir Telegram y conectar tu cuenta:'
-                      : 'Click the button to open Telegram and connect your account:'}
-                  </p>
+                {/* QR Code */}
+                <div className="flex justify-center">
+                  <div className="p-3 bg-white rounded-xl">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(linkData.link)}`}
+                      alt="QR Code"
+                      className="w-36 h-36"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-center text-xs text-zinc-400">
+                  {lang === 'es' ? '📱 Escanea con tu celular o usa el botón:' : '📱 Scan with your phone or use the button:'}
+                </p>
+
+                <div className="flex flex-col gap-2">
                   <a
                     href={linkData.link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
+                    className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
                   >
                     <Send className="h-4 w-4" />
                     {lang === 'es' ? 'Abrir en Telegram' : 'Open in Telegram'}
                     <ExternalLink className="h-3 w-3" />
                   </a>
-                  <p className="text-xs text-zinc-500">
-                    {lang === 'es' ? 'Código:' : 'Code:'} <code className="text-blue-400">{linkData.code}</code>
-                  </p>
                 </div>
+
+                <p className="text-center text-xs text-zinc-500">
+                  {lang === 'es' ? 'Código:' : 'Code:'} <code className="text-blue-400">{linkData.code}</code>
+                </p>
               </div>
             ) : (
               <Button
