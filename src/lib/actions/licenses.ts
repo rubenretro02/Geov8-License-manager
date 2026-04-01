@@ -202,10 +202,14 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
     alert_on_success: 'alert_on_success' in formData ? (formData as Record<string, unknown>).alert_on_success : false,
   }
 
+  // Get phone_number from formData
+  const phoneNumber = 'phone_number' in formData ? (formData as Record<string, unknown>).phone_number as string : null
+
   const licenseData: Partial<License> = {
     license_key: licenseKey,
     customer_name: formData.customer_name || null,
     customer_email: formData.customer_email || null,
+    phone_number: phoneNumber || null,
     is_active: true,
     is_paid: isTrial ? false : formData.is_paid,
     is_trial: isTrial || false,

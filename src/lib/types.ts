@@ -109,6 +109,7 @@ export interface Configuration {
 export type LicenseFormData = {
   customer_name: string
   customer_email: string
+  phone_number?: string
   days_valid: number
   is_paid: boolean
   is_trial?: boolean
