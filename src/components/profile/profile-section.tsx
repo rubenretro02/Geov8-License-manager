@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,7 +25,11 @@ import {
   Wifi,
   MapPin,
   XCircle,
-  CheckCircle
+  CheckCircle,
+  Plus,
+  Trash2,
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
@@ -34,6 +38,12 @@ import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { useLanguage } from '@/lib/language-context'
 import { updateProfile, changePassword, updateTelegramSettings, sendTestTelegramMessage } from '@/lib/actions/profile'
 import { Switch } from '@/components/ui/switch'
+
+interface ConnectedTelegram {
+  chat_id: string
+  username?: string
+  first_name?: string
+}
 
 interface ProfileSectionProps {
   profile: Profile
@@ -58,16 +68,80 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
   })
 
   // Telegram settings
-  const [telegramChatId, setTelegramChatId] = useState(profile.telegram_chat_id || '')
   const [telegramEnabled, setTelegramEnabled] = useState(profile.telegram_enabled || false)
   const [savingTelegram, setSavingTelegram] = useState(false)
-  const [sendingTest, setSendingTest] = useState(false)
+
+  // Connected Telegrams list
+  const [connectedTelegrams, setConnectedTelegrams] = useState<ConnectedTelegram[]>([])
+  const [loadingTelegrams, setLoadingTelegrams] = useState(false)
+
+  // Link generation state
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false)
+  const [linkData, setLinkData] = useState<{
+    code: string
+    link: string
+    linkId: string
+    expiresAt: string
+  } | null>(null)
+  const [checkingLinkStatus, setCheckingLinkStatus] = useState(false)
 
   // Admin alert filters
   const [adminAlertOnFail, setAdminAlertOnFail] = useState(profile.admin_alert_on_fail ?? true)
   const [adminAlertOnSuccess, setAdminAlertOnSuccess] = useState(profile.admin_alert_on_success ?? false)
   const [adminAlertIp, setAdminAlertIp] = useState(profile.admin_alert_ip ?? true)
   const [adminAlertGps, setAdminAlertGps] = useState(profile.admin_alert_gps ?? true)
+
+  // Fetch connected Telegrams
+  const fetchConnectedTelegrams = useCallback(async () => {
+    setLoadingTelegrams(true)
+    try {
+      const res = await fetch(`/api/telegram/list?user_id=${profile.id}`)
+      const data = await res.json()
+      if (data.success) {
+        setConnectedTelegrams(data.telegrams || [])
+      }
+    } catch (err) {
+      console.error('Error fetching telegrams:', err)
+    }
+    setLoadingTelegrams(false)
+  }, [profile.id])
+
+  // Load connected Telegrams on mount
+  useEffect(() => {
+    fetchConnectedTelegrams()
+  }, [fetchConnectedTelegrams])
+
+  // Poll for link status when we have a pending link
+  useEffect(() => {
+    if (!linkData) return
+
+    const checkStatus = async () => {
+      setCheckingLinkStatus(true)
+      try {
+        const res = await fetch(`/api/telegram/status?link_id=${linkData.linkId}`)
+        const data = await res.json()
+
+        if (data.status === 'connected') {
+          // Successfully connected!
+          toast.success(lang === 'es' ? '¡Telegram conectado!' : 'Telegram connected!')
+          setLinkData(null)
+          fetchConnectedTelegrams()
+          setTelegramEnabled(true)
+        } else if (data.status === 'expired') {
+          toast.error(lang === 'es' ? 'El código expiró' : 'Code expired')
+          setLinkData(null)
+        }
+      } catch (err) {
+        console.error('Error checking status:', err)
+      }
+      setCheckingLinkStatus(false)
+    }
+
+    // Check every 3 seconds
+    const interval = setInterval(checkStatus, 3000)
+
+    return () => clearInterval(interval)
+  }, [linkData, fetchConnectedTelegrams, lang])
 
   const handleSaveProfile = async () => {
     setLoading(true)
@@ -112,7 +186,7 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
   const handleSaveTelegram = async () => {
     setSavingTelegram(true)
     const result = await updateTelegramSettings({
-      telegram_chat_id: telegramChatId,
+      telegram_chat_id: connectedTelegrams[0]?.chat_id || '',
       telegram_enabled: telegramEnabled,
       admin_alert_on_fail: adminAlertOnFail,
       admin_alert_on_success: adminAlertOnSuccess,
@@ -128,39 +202,62 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
     setSavingTelegram(false)
   }
 
-  const handleSendTestMessage = async () => {
-    if (!telegramChatId) {
-      toast.error(lang === 'es' ? 'Ingresa tu Chat ID primero' : 'Enter your Chat ID first')
-      return
+  const handleGenerateLink = async () => {
+    setIsGeneratingLink(true)
+    try {
+      const res = await fetch('/api/telegram/generate-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: profile.id }),
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        setLinkData({
+          code: data.code,
+          link: data.link,
+          linkId: data.link_id,
+          expiresAt: data.expires_at,
+        })
+      } else {
+        toast.error(data.error || 'Error generating link')
+      }
+    } catch (err) {
+      toast.error('Error generating link')
     }
+    setIsGeneratingLink(false)
+  }
 
-    setSendingTest(true)
+  const handleRemoveTelegram = async (chatId: string) => {
+    try {
+      const res = await fetch('/api/telegram/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: profile.id, chat_id: chatId }),
+      })
+      const data = await res.json()
 
-    // First, save the chat ID to ensure it's stored
-    const saveResult = await updateTelegramSettings({
-      telegram_chat_id: telegramChatId,
-      telegram_enabled: telegramEnabled,
-      admin_alert_on_fail: adminAlertOnFail,
-      admin_alert_on_success: adminAlertOnSuccess,
-      admin_alert_ip: adminAlertIp,
-      admin_alert_gps: adminAlertGps,
-    })
-
-    if (!saveResult.success) {
-      toast.error(lang === 'es' ? 'Error guardando Chat ID' : 'Error saving Chat ID')
-      setSendingTest(false)
-      return
+      if (data.success) {
+        toast.success(lang === 'es' ? 'Telegram eliminado' : 'Telegram removed')
+        setConnectedTelegrams(prev => prev.filter(t => t.chat_id !== chatId))
+        if (connectedTelegrams.length <= 1) {
+          setTelegramEnabled(false)
+        }
+      } else {
+        toast.error(data.error || 'Error removing')
+      }
+    } catch (err) {
+      toast.error('Error removing')
     }
+  }
 
-    // Then send the test message
-    const result = await sendTestTelegramMessage(telegramChatId)
-
+  const handleSendTestMessage = async (chatId: string) => {
+    const result = await sendTestTelegramMessage(chatId)
     if (result.success) {
       toast.success(lang === 'es' ? 'Mensaje enviado!' : 'Message sent!')
     } else {
       toast.error(result.error || t('errorOccurred'))
     }
-    setSendingTest(false)
   }
 
   const getRoleBadge = () => {
@@ -360,7 +457,7 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
         </Card>
       )}
 
-      {/* Telegram Notifications Card */}
+      {/* Telegram Notifications Card - NEW AUTO-LINK SYSTEM */}
       <Card className="bg-zinc-900/50 border-zinc-800">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -369,8 +466,8 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
           </CardTitle>
           <CardDescription className="text-zinc-400">
             {lang === 'es'
-              ? 'Recibe alertas de tus licencias en Telegram'
-              : 'Receive license alerts on Telegram'}
+              ? 'Conecta tu Telegram para recibir alertas automáticamente'
+              : 'Connect your Telegram to receive automatic alerts'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -383,82 +480,173 @@ export function ProfileSection({ profile, user }: ProfileSectionProps) {
                   {lang === 'es' ? 'Activar Notificaciones' : 'Enable Notifications'}
                 </p>
                 <p className="text-xs text-zinc-500">
-                  {lang === 'es'
-                    ? 'Recibir alertas cuando un check falle'
-                    : 'Receive alerts when a check fails'}
+                  {connectedTelegrams.length > 0
+                    ? (lang === 'es' ? `${connectedTelegrams.length} Telegram(s) conectado(s)` : `${connectedTelegrams.length} Telegram(s) connected`)
+                    : (lang === 'es' ? 'Conecta tu Telegram primero' : 'Connect your Telegram first')}
                 </p>
               </div>
             </div>
             <Switch
               checked={telegramEnabled}
               onCheckedChange={setTelegramEnabled}
+              disabled={connectedTelegrams.length === 0}
             />
           </div>
 
-          {/* Chat ID Input */}
+          {/* Connected Telegrams List */}
           <div className="space-y-3">
-            <Label className="text-zinc-300 flex items-center gap-2">
-              <MessageCircle className="h-4 w-4" />
-              Chat ID
-            </Label>
-            <Input
-              value={telegramChatId}
-              onChange={(e) => setTelegramChatId(e.target.value)}
-              placeholder="123456789"
-              className="bg-zinc-800 border-zinc-700 text-white"
-            />
+            <div className="flex items-center justify-between">
+              <Label className="text-zinc-300 flex items-center gap-2">
+                <MessageCircle className="h-4 w-4" />
+                {lang === 'es' ? 'Telegrams Conectados' : 'Connected Telegrams'}
+              </Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchConnectedTelegrams}
+                disabled={loadingTelegrams}
+                className="text-zinc-400 hover:text-white h-8"
+              >
+                <RefreshCw className={`h-3 w-3 ${loadingTelegrams ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
 
-            {/* Test Button */}
-            <Button
-              onClick={handleSendTestMessage}
-              disabled={sendingTest || !telegramChatId}
-              variant="outline"
-              className="w-full border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
-            >
-              {sendingTest ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4 mr-2" />
-              )}
-              {lang === 'es' ? 'Enviar Mensaje de Prueba' : 'Send Test Message'}
-            </Button>
+            {loadingTelegrams ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+              </div>
+            ) : connectedTelegrams.length > 0 ? (
+              <div className="space-y-2">
+                {connectedTelegrams.map((tg) => (
+                  <div
+                    key={tg.chat_id}
+                    className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg border border-zinc-700"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center">
+                        <Send className="h-4 w-4 text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-white font-medium">
+                          {tg.username ? `@${tg.username}` : tg.first_name || 'Telegram User'}
+                        </p>
+                        <p className="text-xs text-zinc-500">ID: {tg.chat_id}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSendTestMessage(tg.chat_id)}
+                        className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 h-8 px-2"
+                        title={lang === 'es' ? 'Enviar mensaje de prueba' : 'Send test message'}
+                      >
+                        <Send className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveTelegram(tg.chat_id)}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 px-2"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 bg-zinc-800/30 rounded-lg border border-dashed border-zinc-700">
+                <MessageCircle className="h-8 w-8 text-zinc-600 mx-auto mb-2" />
+                <p className="text-zinc-500 text-sm">
+                  {lang === 'es' ? 'No hay Telegrams conectados' : 'No Telegrams connected'}
+                </p>
+              </div>
+            )}
 
-            <div className="text-xs text-zinc-500 space-y-2">
-              <p className="font-medium text-zinc-400">
-                {lang === 'es' ? 'Cómo obtener tu Chat ID:' : 'How to get your Chat ID:'}
+            {/* Add Telegram Button / Link Generation */}
+            {linkData ? (
+              <div className="p-4 bg-blue-500/10 rounded-xl border border-blue-500/20 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {checkingLinkStatus && <Loader2 className="h-4 w-4 animate-spin text-blue-400" />}
+                    <span className="text-sm text-blue-400">
+                      {lang === 'es' ? 'Esperando conexión...' : 'Waiting for connection...'}
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setLinkData(null)}
+                    className="text-zinc-400 hover:text-white h-8"
+                  >
+                    {lang === 'es' ? 'Cancelar' : 'Cancel'}
+                  </Button>
+                </div>
+
+                <div className="text-center space-y-3">
+                  <p className="text-sm text-zinc-300">
+                    {lang === 'es'
+                      ? 'Haz clic en el botón para abrir Telegram y conectar tu cuenta:'
+                      : 'Click the button to open Telegram and connect your account:'}
+                  </p>
+                  <a
+                    href={linkData.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
+                  >
+                    <Send className="h-4 w-4" />
+                    {lang === 'es' ? 'Abrir en Telegram' : 'Open in Telegram'}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <p className="text-xs text-zinc-500">
+                    {lang === 'es' ? 'Código:' : 'Code:'} <code className="text-blue-400">{linkData.code}</code>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <Button
+                onClick={handleGenerateLink}
+                disabled={isGeneratingLink}
+                variant="outline"
+                className="w-full border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+              >
+                {isGeneratingLink ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4 mr-2" />
+                )}
+                {lang === 'es' ? 'Agregar Telegram' : 'Add Telegram'}
+              </Button>
+            )}
+
+            <div className="text-xs text-zinc-500 p-3 bg-zinc-800/30 rounded-lg">
+              <p className="font-medium text-zinc-400 mb-2">
+                {lang === 'es' ? 'Cómo funciona:' : 'How it works:'}
               </p>
-              {lang === 'es' ? (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Abre Telegram en tu teléfono o computadora</li>
-                  <li>Busca <span className="text-blue-400">@userinfobot</span> y abre el chat</li>
-                  <li>Envía /start</li>
-                  <li>El bot responderá con tu info incluyendo "Id: 123456789"</li>
-                  <li>Copia ese número (tu Chat ID)</li>
-                  <li>Pégalo en el campo de arriba</li>
-                  <li>Activa el switch para recibir alertas</li>
-                </ol>
-              ) : (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Open Telegram app on your phone or desktop</li>
-                  <li>Search for <span className="text-blue-400">@userinfobot</span> and open the chat</li>
-                  <li>Click START or send /start</li>
-                  <li>The bot will reply with your info including "Id: 123456789"</li>
-                  <li>Copy that number (your Chat ID)</li>
-                  <li>Paste it in the field above</li>
-                  <li>Enable the toggle switch to receive alerts</li>
-                </ol>
-              )}
-              <p className="text-amber-400/80 mt-2">
-                {lang === 'es'
-                  ? <>Después, busca <span className="text-blue-400">@geoalerts_bot</span> y envía /start para permitir que te envíe notificaciones.</>
-                  : <>After setup, search for <span className="text-blue-400">@geoalerts_bot</span> and click START to allow it to send you notifications.</>
-                }
-              </p>
+              <ol className="list-decimal list-inside space-y-1">
+                {lang === 'es' ? (
+                  <>
+                    <li>Haz clic en "Agregar Telegram"</li>
+                    <li>Se abrirá Telegram con el bot @geoalerts_bot</li>
+                    <li>Presiona START en el bot</li>
+                    <li>¡Listo! Tu cuenta quedará conectada automáticamente</li>
+                  </>
+                ) : (
+                  <>
+                    <li>Click "Add Telegram"</li>
+                    <li>Telegram will open with the @geoalerts_bot</li>
+                    <li>Press START in the bot</li>
+                    <li>Done! Your account will be connected automatically</li>
+                  </>
+                )}
+              </ol>
             </div>
           </div>
 
           {/* Admin Alert Filters */}
-          {telegramEnabled && (
+          {telegramEnabled && connectedTelegrams.length > 0 && (
             <div className="space-y-4 pt-4 border-t border-zinc-800">
               <div className="flex items-center gap-2 text-zinc-400 text-sm">
                 <Bell className="h-4 w-4" />
