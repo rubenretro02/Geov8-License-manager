@@ -59,13 +59,12 @@ export async function getAlertLogs(
     licenseKeys.push(l.license_key)
   })
 
-  // STEP 2: Get check logs for ALL user's licenses (auditing)
+  // STEP 2: Get check logs for ALL user's licenses (auditing) - no limit for historical searches
   let query = supabase
     .from('check_logs')
     .select('*')
     .in('license_key', licenseKeys)
     .order('created_at', { ascending: false })
-    .limit(100)
 
   // Filter by status - 'valid' is success, everything else is a failure
   if (statusFilter === 'error') {

@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Profile, CheckLog, License } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
-import { AlertTriangle, CheckCircle, RefreshCw, Bell, Filter, BellRing, Wifi, MapPin, Eye, Settings } from 'lucide-react'
+import { AlertTriangle, CheckCircle, RefreshCw, Bell, Filter, BellRing, Wifi, MapPin, Settings, Search, X, CalendarDays } from 'lucide-react'
 import { AlertSettingsDialog } from '@/components/dashboard/alert-settings-dialog'
 import { getAlertLogs, getMonitoredLicenses } from '@/lib/actions/alerts'
 import { updateLicenseAlerts } from '@/lib/actions/licenses'
@@ -26,6 +27,11 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
   const [filter, setFilter] = useState<'all' | 'error' | 'success'>('all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'ip' | 'gps'>('all')
   const [activeTab, setActiveTab] = useState('logs')
+
+  // Search filter - like Ctrl+F
+  const [searchQuery, setSearchQuery] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   // Alert settings dialog
   const [selectedLicense, setSelectedLicense] = useState<License | null>(null)
@@ -62,6 +68,46 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
     }, 30000)
     return () => clearInterval(interval)
   }, [loadAlerts, loadMonitoredLicenses])
+
+  // Comprehensive search filter - like Ctrl+F
+  const filteredLogs = useMemo(() => {
+    let result = [...logs]
+
+    // Apply text search filter (searches everywhere like Ctrl+F)
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      result = result.filter((log) => {
+        // Search in all relevant fields
+        const searchableText = [
+          log.license_key || '',
+          log.customer_name || '',
+          log.hwid || '',
+          log.ip_address || '',
+          log.ip_city || '',
+          log.ip_state || '',
+          log.ip_country || '',
+          log.message || '',
+          log.status || '',
+          new Date(log.created_at).toLocaleString(),
+        ].join(' ').toLowerCase()
+
+        return searchableText.includes(query)
+      })
+    }
+
+    // Apply date filters
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom + 'T00:00:00')
+      result = result.filter((log) => new Date(log.created_at) >= fromDate)
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo + 'T23:59:59.999')
+      result = result.filter((log) => new Date(log.created_at) <= toDate)
+    }
+
+    return result
+  }, [logs, searchQuery, dateFrom, dateTo])
 
   const handleToggleAlert = async (license: License, enabled: boolean) => {
     const result = await updateLicenseAlerts(license.license_key, {
@@ -106,6 +152,53 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
     return 'other'
   }
 
+  // Helper to format date as YYYY-MM-DD in LOCAL timezone
+  const formatLocalDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  // Quick date shortcuts
+  const setToday = () => {
+    const today = formatLocalDate(new Date())
+    setDateFrom(today)
+    setDateTo(today)
+  }
+
+  const setThisWeek = () => {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+    setDateFrom(formatLocalDate(monday))
+    setDateTo(formatLocalDate(now))
+  }
+
+  const setThisMonth = () => {
+    const now = new Date()
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+    setDateFrom(formatLocalDate(firstDay))
+    setDateTo(formatLocalDate(now))
+  }
+
+  const setLastMonth = () => {
+    const now = new Date()
+    const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+    setDateFrom(formatLocalDate(firstDayLastMonth))
+    setDateTo(formatLocalDate(lastDayLastMonth))
+  }
+
+  const clearFilters = () => {
+    setSearchQuery('')
+    setDateFrom('')
+    setDateTo('')
+  }
+
+  const hasFilters = searchQuery || dateFrom || dateTo
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -144,34 +237,140 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
 
         {/* Alert Logs Tab */}
         <TabsContent value="logs" className="space-y-4 mt-4">
-          {/* Filters */}
+          {/* Filters Card */}
           <Card className="bg-zinc-900 border-zinc-800">
-            <CardContent className="py-4">
-              <div className="flex items-center gap-4">
-                <Filter className="w-4 h-4 text-zinc-400" />
-                <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-                  <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-700">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="error">Failed Only</SelectItem>
-                    <SelectItem value="success">Success Only</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
-                  <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-700">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="ip">IP Errors</SelectItem>
-                    <SelectItem value="gps">GPS Errors</SelectItem>
-                  </SelectContent>
-                </Select>
-                <span className="text-sm text-zinc-500 ml-auto">
-                  {logs.length} alerts • Auto-refresh: 30s
+            <CardContent className="py-4 space-y-4">
+              {/* Row 1: Search and Status Filters */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                {/* Search Input - like Ctrl+F */}
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                  <Input
+                    placeholder="Search by IP, license, name, HWID, location, message..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-zinc-400" />
+                  <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+                    <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-700">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="error">Failed Only</SelectItem>
+                      <SelectItem value="success">Success Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
+                    <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-700">
+                      <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="ip">IP Errors</SelectItem>
+                      <SelectItem value="gps">GPS Errors</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Row 2: Date Range Filter */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-3 border-t border-zinc-800">
+                <div className="flex items-center gap-2 text-zinc-400">
+                  <CalendarDays className="h-4 w-4" />
+                  <span className="text-sm font-medium">Date:</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-[150px] bg-zinc-800 border-zinc-700 text-white [color-scheme:dark]"
+                  />
+                  <span className="text-zinc-500 text-sm">to</span>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-[150px] bg-zinc-800 border-zinc-700 text-white [color-scheme:dark]"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={setToday}
+                    className={`text-xs border-zinc-700 ${
+                      dateFrom === formatLocalDate(new Date()) && dateTo === formatLocalDate(new Date())
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                    }`}
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={setThisWeek}
+                    className="text-xs border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  >
+                    This Week
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={setThisMonth}
+                    className="text-xs border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  >
+                    This Month
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={setLastMonth}
+                    className="text-xs border-zinc-700 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                  >
+                    Last Month
+                  </Button>
+                  {hasFilters && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearFilters}
+                      className="text-xs text-zinc-500 hover:text-white"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Row 3: Results Info */}
+              <div className="flex items-center justify-between text-sm text-zinc-500 pt-2 border-t border-zinc-800">
+                <span>
+                  Showing {filteredLogs.length} of {logs.length} alerts
+                  {hasFilters && ' (filtered)'}
                 </span>
+                <span>Auto-refresh: 30s</span>
               </div>
             </CardContent>
           </Card>
@@ -184,14 +383,27 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                   Loading alerts...
                 </CardContent>
               </Card>
-            ) : logs.length === 0 ? (
+            ) : filteredLogs.length === 0 ? (
               <Card className="bg-zinc-900 border-zinc-800">
                 <CardContent className="py-8 text-center text-zinc-400">
-                  No alerts found
+                  {hasFilters ? (
+                    <div>
+                      <p>No alerts match your search</p>
+                      <Button
+                        variant="link"
+                        onClick={clearFilters}
+                        className="text-amber-400 mt-2"
+                      >
+                        Clear filters
+                      </Button>
+                    </div>
+                  ) : (
+                    'No alerts found'
+                  )}
                 </CardContent>
               </Card>
             ) : (
-              logs.map((log) => (
+              filteredLogs.map((log) => (
                 <Card
                   key={log.id}
                   className={`bg-zinc-900 border-l-4 ${
@@ -219,9 +431,10 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                         <p className="text-sm text-red-400 font-mono">
                           {log.message || 'No message'}
                         </p>
-                        <div className="flex gap-4 mt-2 text-xs text-zinc-500">
+                        <div className="flex flex-wrap gap-4 mt-2 text-xs text-zinc-500">
                           <span>IP: {log.ip_address || '--'}</span>
-                          <span>Location: {log.ip_city}, {log.ip_state}</span>
+                          <span>Location: {[log.ip_city, log.ip_state, log.ip_country].filter(Boolean).join(', ') || '--'}</span>
+                          {log.hwid && <span>HWID: ...{log.hwid.slice(-8)}</span>}
                         </div>
                       </div>
                     </div>

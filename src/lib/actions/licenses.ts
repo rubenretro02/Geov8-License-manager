@@ -524,11 +524,11 @@ export async function getCheckLogs(licenseKey?: string) {
     }
   }
 
+  // Get ALL logs - no limit to allow historical searches
   let query = supabase
     .from('check_logs')
     .select('*')
     .order('created_at', { ascending: false })
-    .limit(100)
 
   if (licenseKey) {
     query = query.eq('license_key', licenseKey)
