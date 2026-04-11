@@ -91,13 +91,17 @@ async function sendTelegramAlert(
     return
   }
 
-  // Check if should alert based on status (any non-valid status is a fail)
-  const isFailure = status !== 'valid'
-  if (isFailure && !license.alert_on_fail) {
+  // Check if should alert based on status
+  const isIpChange = status === 'ip_change'
+  const isFailure = status !== 'valid' && !isIpChange
+
+  // IP change alerts are controlled by alert_ip setting (already checked before calling)
+  if (isIpChange) {
+    console.log('[Telegram] Sending IP change alert')
+  } else if (isFailure && !license.alert_on_fail) {
     console.log('[Telegram] Failure alerts not enabled')
     return
-  }
-  if (!isFailure && !license.alert_on_success) {
+  } else if (!isFailure && !license.alert_on_success) {
     console.log('[Telegram] Success alerts not enabled')
     return
   }
@@ -126,10 +130,11 @@ async function sendTelegramAlert(
     return
   }
 
-  // Build message
-  const icon = isFailure ? '🔴' : '🟢'
-  const title = isFailure ? 'CHECK FAILED' : 'CHECK PASSED'
-  const detailIcon = isFailure ? '❌' : '✅'
+  // Build message - handle ip_change as warning (orange)
+  const isIpChange = status === 'ip_change'
+  const icon = isIpChange ? '🟠' : (isFailure ? '🔴' : '🟢')
+  const title = isIpChange ? 'IP CHANGED' : (isFailure ? 'CHECK FAILED' : 'CHECK PASSED')
+  const detailIcon = isIpChange ? '⚠️' : (isFailure ? '❌' : '✅')
 
   const msgLines = [
     `${icon} <b>${title}</b>`,
@@ -208,6 +213,48 @@ async function createCheckLog(
   } catch (error) {
     console.error('Error creating check log:', error)
   }
+}
+
+// Get the last IP used for this license
+async function getLastIpForLicense(licenseKey: string): Promise<string | null> {
+  try {
+    const { data } = await getSupabase()
+      .from('check_logs')
+      .select('ip_address')
+      .eq('license_key', licenseKey)
+      .eq('status', 'valid')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+    return data?.ip_address || null
+  } catch {
+    return null
+  }
+}
+
+// Check if IP has changed and create appropriate log
+async function checkIpChange(
+  license: License,
+  currentIp: string,
+  geo: GeoInfo
+): Promise<{ changed: boolean; previousIp: string | null }> {
+  const previousIp = await getLastIpForLicense(license.license_key)
+
+  // If there's a previous IP and it's different from current
+  if (previousIp && previousIp !== currentIp) {
+    // Create IP change log
+    const message = `IP changed from ${previousIp} to ${currentIp}`
+    await createCheckLog(license.license_key, license.hwid || 'unknown', currentIp, 'ip_change', message, geo)
+
+    // Send alert if IP alerts are enabled
+    if (license.alert_enabled && license.alert_ip) {
+      await sendTelegramAlert(license, 'ip_change', message, currentIp, geo)
+    }
+
+    return { changed: true, previousIp }
+  }
+
+  return { changed: false, previousIp: null }
 }
 
 export async function POST(request: NextRequest) {
@@ -323,6 +370,11 @@ export async function POST(request: NextRequest) {
       }
 
       console.log(`License ${license_key} successfully bound to HWID: ${hwid.substring(0, 8)}...`)
+    }
+
+    // Check for IP change (only for existing licenses with previous checks)
+    if (hasExistingHwid) {
+      await checkIpChange(lic, ip, geo)
     }
 
     // Success - create log and optionally send success alert
