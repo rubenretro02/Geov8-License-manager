@@ -19,9 +19,10 @@ import {
   Wifi,
   MapPin,
   Clock,
-  FileText
+  FileText,
+  ArrowLeftRight
 } from 'lucide-react'
-import { getAlertsByLicense } from '@/lib/actions/alerts'
+import { getAlertsByLicense, isIpChangeLog } from '@/lib/actions/alerts'
 
 interface LicenseAlertsSummary {
   license_key: string
@@ -29,6 +30,7 @@ interface LicenseAlertsSummary {
   total_alerts: number
   failed_alerts: number
   success_alerts: number
+  ip_change_alerts: number
   last_alert_at: string | null
 }
 
@@ -86,6 +88,12 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
     return `${year}-${month}-${day}`
   }
 
+  // Check if log is IP change
+  const checkIsIpChange = (log: CheckLog): boolean => {
+    const msg = (log.message || '').toLowerCase()
+    return msg.includes('ip change') || msg.includes('ip changed') || msg.includes('new ip') || msg.includes('different ip')
+  }
+
   // Apply client-side filters
   const filteredLogs = useMemo(() => {
     let result = [...logs]
@@ -121,18 +129,49 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
     return result
   }, [logs, searchQuery, dateFrom, dateTo])
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (log: CheckLog) => {
+    // Check for IP change first
+    if (checkIsIpChange(log)) {
+      return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs">IP Change</Badge>
+    }
+    const status = log.status
     if (status === 'success' || status === 'valid') {
       return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">Success</Badge>
     }
     return <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">Failed</Badge>
   }
 
-  const getAlertIcon = (status: string) => {
+  const getAlertIcon = (log: CheckLog) => {
+    if (checkIsIpChange(log)) {
+      return <ArrowLeftRight className="w-4 h-4 text-orange-400 shrink-0" />
+    }
+    const status = log.status
     if (status === 'success' || status === 'valid') {
       return <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
     }
     return <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+  }
+
+  const getAlertBorderColor = (log: CheckLog) => {
+    if (checkIsIpChange(log)) {
+      return 'border-l-orange-500 bg-orange-500/5'
+    }
+    const status = log.status
+    if (status === 'success' || status === 'valid') {
+      return 'border-l-emerald-500 bg-zinc-800/30'
+    }
+    return 'border-l-red-500 bg-zinc-800/50'
+  }
+
+  const getMessageColor = (log: CheckLog) => {
+    if (checkIsIpChange(log)) {
+      return 'text-orange-400'
+    }
+    const status = log.status
+    if (status === 'success' || status === 'valid') {
+      return 'text-emerald-400'
+    }
+    return 'text-red-400'
   }
 
   const getErrorType = (message: string | null): 'ip' | 'gps' | 'other' => {
@@ -190,20 +229,25 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
             <div>
               <DialogTitle className="text-xl font-bold text-white flex items-center gap-2">
                 <FileText className="w-5 h-5 text-amber-400" />
-                Alertas de Licencia
+                License Alerts
               </DialogTitle>
               <p className="text-sm text-zinc-400 mt-1">
-                {license.customer_name || 'Sin nombre'} •{' '}
+                {license.customer_name || 'No name'} •{' '}
                 <code className="text-emerald-400">{license.license_key.slice(0, 12)}...</code>
               </p>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
-                  {license.failed_alerts} errores
+                  {license.failed_alerts} errors
                 </Badge>
+                {(license.ip_change_alerts || 0) > 0 && (
+                  <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">
+                    {license.ip_change_alerts} IP
+                  </Badge>
+                )}
                 <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                  {license.success_alerts} exitosos
+                  {license.success_alerts} ok
                 </Badge>
               </div>
               <Button
@@ -226,7 +270,7 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
               <Input
-                placeholder="Buscar por IP, HWID, ubicacion, mensaje..."
+                placeholder="Search by IP, HWID, location, message..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
@@ -245,20 +289,20 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
               <Filter className="w-4 h-4 text-zinc-400" />
               <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
                 <SelectTrigger className="w-[130px] bg-zinc-800 border-zinc-700">
-                  <SelectValue placeholder="Estado" />
+                  <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="error">Solo Errores</SelectItem>
-                  <SelectItem value="success">Solo Exitos</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="error">Errors Only</SelectItem>
+                  <SelectItem value="success">Success Only</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
                 <SelectTrigger className="w-[120px] bg-zinc-800 border-zinc-700">
-                  <SelectValue placeholder="Tipo" />
+                  <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   <SelectItem value="ip">IP</SelectItem>
                   <SelectItem value="gps">GPS</SelectItem>
                 </SelectContent>
@@ -275,7 +319,7 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
               onChange={(e) => setDateFrom(e.target.value)}
               className="w-[140px] bg-zinc-800 border-zinc-700 text-white [color-scheme:dark] text-sm"
             />
-            <span className="text-zinc-500 text-sm">a</span>
+            <span className="text-zinc-500 text-sm">to</span>
             <Input
               type="date"
               value={dateTo}
@@ -290,7 +334,7 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
                 onClick={setToday}
                 className="text-xs border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800 h-8"
               >
-                Hoy
+                Today
               </Button>
               <Button
                 type="button"
@@ -299,7 +343,7 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
                 onClick={setThisWeek}
                 className="text-xs border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800 h-8"
               >
-                Esta Semana
+                This Week
               </Button>
               <Button
                 type="button"
@@ -308,7 +352,7 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
                 onClick={setThisMonth}
                 className="text-xs border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800 h-8"
               >
-                Este Mes
+                This Month
               </Button>
               {hasFilters && (
                 <Button
@@ -319,7 +363,7 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
                   className="text-xs text-zinc-500 hover:text-white h-8"
                 >
                   <X className="h-3 w-3 mr-1" />
-                  Limpiar
+                  Clear
                 </Button>
               )}
             </div>
@@ -327,8 +371,8 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
 
           {/* Results count */}
           <div className="text-xs text-zinc-500">
-            Mostrando {filteredLogs.length} de {logs.length} alertas
-            {hasFilters && ' (filtrado)'}
+            Showing {filteredLogs.length} of {logs.length} alerts
+            {hasFilters && ' (filtered)'}
           </div>
         </div>
 
@@ -338,26 +382,26 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
             {loading && logs.length === 0 ? (
               <div className="py-12 text-center text-zinc-400">
                 <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-zinc-600" />
-                Cargando alertas...
+                Loading alerts...
               </div>
             ) : filteredLogs.length === 0 ? (
               <div className="py-12 text-center text-zinc-400">
                 {hasFilters ? (
                   <div>
                     <Search className="w-8 h-8 mx-auto mb-3 text-zinc-600" />
-                    <p>No hay alertas que coincidan con tu busqueda</p>
+                    <p>No alerts match your search</p>
                     <Button
                       variant="link"
                       onClick={clearFilters}
                       className="text-amber-400 mt-2"
                     >
-                      Limpiar filtros
+                      Clear filters
                     </Button>
                   </div>
                 ) : (
                   <div>
                     <CheckCircle className="w-8 h-8 mx-auto mb-3 text-zinc-600" />
-                    <p>No hay alertas para esta licencia</p>
+                    <p>No alerts for this license</p>
                   </div>
                 )}
               </div>
@@ -367,17 +411,13 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
                 return (
                   <div
                     key={log.id}
-                    className={`p-3 rounded-lg border-l-4 ${
-                      log.status === 'success' || log.status === 'valid'
-                        ? 'border-l-emerald-500 bg-zinc-800/30 border-zinc-800'
-                        : 'border-l-red-500 bg-zinc-800/50 border-zinc-800'
-                    }`}
+                    className={`p-3 rounded-lg border-l-4 border-zinc-800 ${getAlertBorderColor(log)}`}
                   >
                     <div className="flex items-start gap-3">
-                      {getAlertIcon(log.status)}
+                      {getAlertIcon(log)}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center flex-wrap gap-2 mb-1">
-                          {getStatusBadge(log.status)}
+                          {getStatusBadge(log)}
                           {errorType !== 'other' && (
                             <Badge variant="outline" className="text-xs border-zinc-700">
                               {errorType === 'ip' ? (
@@ -392,14 +432,12 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
                             {formatTime(log.created_at)}
                           </span>
                         </div>
-                        <p className={`text-sm font-mono ${
-                          log.status === 'success' || log.status === 'valid' ? 'text-emerald-400' : 'text-red-400'
-                        }`}>
-                          {log.message || 'Sin mensaje'}
+                        <p className={`text-sm font-mono ${getMessageColor(log)}`}>
+                          {log.message || 'No message'}
                         </p>
                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-zinc-500">
                           <span>IP: {log.ip_address || '--'}</span>
-                          <span>Ubicacion: {[log.ip_city, log.ip_state, log.ip_country].filter(Boolean).join(', ') || '--'}</span>
+                          <span>Location: {[log.ip_city, log.ip_state, log.ip_country].filter(Boolean).join(', ') || '--'}</span>
                           {log.hwid && <span>HWID: ...{log.hwid.slice(-8)}</span>}
                         </div>
                       </div>

@@ -21,7 +21,14 @@ export interface LicenseAlertsSummary {
   total_alerts: number
   failed_alerts: number
   success_alerts: number
+  ip_change_alerts: number
   last_alert_at: string | null
+}
+
+// Helper to detect if a log is an IP change
+export function isIpChangeLog(log: { status: string; message?: string | null }): boolean {
+  const msg = (log.message || '').toLowerCase()
+  return msg.includes('ip change') || msg.includes('ip changed') || msg.includes('new ip') || msg.includes('different ip')
 }
 
 export async function getAlertLogs(
@@ -241,22 +248,32 @@ export async function getLicensesWithAlertsSummary(): Promise<LicenseAlertsSumma
   }
 
   // Group logs by license
-  const licenseLogsMap = new Map<string, { total: number; failed: number; success: number; lastAt: string | null }>()
+  const licenseLogsMap = new Map<string, { total: number; failed: number; success: number; ipChange: number; lastAt: string | null }>()
 
   // Initialize with all licenses (even those with 0 logs)
   userLicenses.forEach(l => {
-    licenseLogsMap.set(l.license_key, { total: 0, failed: 0, success: 0, lastAt: null })
+    licenseLogsMap.set(l.license_key, { total: 0, failed: 0, success: 0, ipChange: 0, lastAt: null })
   })
 
+  // Get messages for IP change detection
+  const { data: logsWithMessages } = await supabase
+    .from('check_logs')
+    .select('license_key, status, message, created_at')
+    .in('license_key', licenseKeys)
+    .order('created_at', { ascending: false })
+
   // Count logs
-  allLogs?.forEach(log => {
+  logsWithMessages?.forEach(log => {
     const key = log.license_key
     if (!key) return
 
-    const current = licenseLogsMap.get(key) || { total: 0, failed: 0, success: 0, lastAt: null }
+    const current = licenseLogsMap.get(key) || { total: 0, failed: 0, success: 0, ipChange: 0, lastAt: null }
     current.total++
 
-    if (log.status === 'valid' || log.status === 'success') {
+    // Check if it's an IP change
+    if (isIpChangeLog(log)) {
+      current.ipChange++
+    } else if (log.status === 'valid' || log.status === 'success') {
       current.success++
     } else {
       current.failed++
@@ -281,6 +298,7 @@ export async function getLicensesWithAlertsSummary(): Promise<LicenseAlertsSumma
         total_alerts: stats.total,
         failed_alerts: stats.failed,
         success_alerts: stats.success,
+        ip_change_alerts: stats.ipChange,
         last_alert_at: stats.lastAt,
       })
     }

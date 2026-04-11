@@ -25,7 +25,8 @@ import {
   FileText,
   Clock,
   Shield,
-  Filter
+  Filter,
+  ArrowLeftRight
 } from 'lucide-react'
 import { AlertSettingsDialog } from '@/components/dashboard/alert-settings-dialog'
 import { getLicensesWithAlertsSummary, getMonitoredLicenses } from '@/lib/actions/alerts'
@@ -129,15 +130,15 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
       alert_on_success: license.alert_on_success ?? false,
     })
     if (result.success) {
-      toast.success(enabled ? 'Alertas activadas' : 'Alertas desactivadas')
+      toast.success(enabled ? 'Alerts enabled' : 'Alerts disabled')
       loadMonitoredLicenses()
     } else {
-      toast.error(result.error || 'Error actualizando alertas')
+      toast.error(result.error || 'Error updating alerts')
     }
   }
 
   const formatTimeAgo = (dateString: string | null) => {
-    if (!dateString) return 'Nunca'
+    if (!dateString) return 'Never'
     const date = new Date(dateString)
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
@@ -145,11 +146,11 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
 
-    if (diffMins < 1) return 'Ahora mismo'
-    if (diffMins < 60) return `hace ${diffMins}m`
-    if (diffHours < 24) return `hace ${diffHours}h`
-    if (diffDays === 1) return 'Ayer'
-    if (diffDays < 7) return `hace ${diffDays}d`
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays === 1) return 'Yesterday'
+    if (diffDays < 7) return `${diffDays}d ago`
     return date.toLocaleDateString()
   }
 
@@ -160,10 +161,22 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
         total: acc.total + license.total_alerts,
         failed: acc.failed + license.failed_alerts,
         success: acc.success + license.success_alerts,
+        ipChanges: acc.ipChanges + (license.ip_change_alerts || 0),
       }),
-      { total: 0, failed: 0, success: 0 }
+      { total: 0, failed: 0, success: 0, ipChanges: 0 }
     )
   }, [licensesSummary])
+
+  // Determine icon based on alert types
+  const getLicenseIcon = (license: LicenseAlertsSummaryType) => {
+    if (license.failed_alerts > 0) {
+      return { bg: 'bg-red-500/20', icon: <AlertTriangle className="w-6 h-6 text-red-400" /> }
+    }
+    if ((license.ip_change_alerts || 0) > 0) {
+      return { bg: 'bg-orange-500/20', icon: <ArrowLeftRight className="w-6 h-6 text-orange-400" /> }
+    }
+    return { bg: 'bg-emerald-500/20', icon: <CheckCircle className="w-6 h-6 text-emerald-400" /> }
+  }
 
   return (
     <div className="space-y-6">
@@ -172,8 +185,8 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
         <div className="flex items-center gap-3">
           <Bell className="w-8 h-8 text-amber-400" />
           <div>
-            <h1 className="text-2xl font-bold text-white">Centro de Alertas</h1>
-            <p className="text-zinc-400 text-sm">Monitorea tus licencias de forma organizada</p>
+            <h1 className="text-2xl font-bold text-white">Alert Center</h1>
+            <p className="text-zinc-400 text-sm">Monitor your licenses in an organized way</p>
           </div>
         </div>
         <Button
@@ -184,12 +197,12 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
           className="border-zinc-700"
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
+          Refresh
         </Button>
       </div>
 
       {/* Stats Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="bg-zinc-900 border-zinc-800">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -198,7 +211,7 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
               </div>
               <div>
                 <p className="text-2xl font-bold text-white">{totals.total}</p>
-                <p className="text-xs text-zinc-500">Total Alertas</p>
+                <p className="text-xs text-zinc-500">Total Alerts</p>
               </div>
             </div>
           </CardContent>
@@ -211,7 +224,20 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
               </div>
               <div>
                 <p className="text-2xl font-bold text-red-400">{totals.failed}</p>
-                <p className="text-xs text-zinc-500">Errores</p>
+                <p className="text-xs text-zinc-500">Errors</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <ArrowLeftRight className="w-5 h-5 text-orange-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-orange-400">{totals.ipChanges}</p>
+                <p className="text-xs text-zinc-500">IP Changes</p>
               </div>
             </div>
           </CardContent>
@@ -224,7 +250,7 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
               </div>
               <div>
                 <p className="text-2xl font-bold text-emerald-400">{totals.success}</p>
-                <p className="text-xs text-zinc-500">Exitosos</p>
+                <p className="text-xs text-zinc-500">Successful</p>
               </div>
             </div>
           </CardContent>
@@ -237,7 +263,7 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
               </div>
               <div>
                 <p className="text-2xl font-bold text-white">{licensesSummary.length}</p>
-                <p className="text-xs text-zinc-500">Licencias con Logs</p>
+                <p className="text-xs text-zinc-500">Licenses with Logs</p>
               </div>
             </div>
           </CardContent>
@@ -249,11 +275,11 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
         <TabsList className="bg-zinc-800 border-zinc-700">
           <TabsTrigger value="licenses" className="data-[state=active]:bg-zinc-700">
             <FileText className="w-4 h-4 mr-2" />
-            Alertas por Licencia
+            Alerts by License
           </TabsTrigger>
           <TabsTrigger value="monitored" className="data-[state=active]:bg-zinc-700">
             <BellRing className="w-4 h-4 mr-2" />
-            Monitoreadas ({monitoredLicenses.length})
+            Monitored ({monitoredLicenses.length})
           </TabsTrigger>
         </TabsList>
 
@@ -266,7 +292,7 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                   <Input
-                    placeholder="Buscar por nombre o clave de licencia..."
+                    placeholder="Search by name or license key..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9 bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
@@ -285,18 +311,18 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                   <Filter className="w-4 h-4 text-zinc-400" />
                   <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
                     <SelectTrigger className="w-[160px] bg-zinc-800 border-zinc-700">
-                      <SelectValue placeholder="Ordenar por" />
+                      <SelectValue placeholder="Sort by" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="recent">Mas reciente</SelectItem>
-                      <SelectItem value="errors">Mas errores</SelectItem>
-                      <SelectItem value="total">Mas alertas</SelectItem>
+                      <SelectItem value="recent">Most recent</SelectItem>
+                      <SelectItem value="errors">Most errors</SelectItem>
+                      <SelectItem value="total">Most alerts</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="mt-3 text-sm text-zinc-500">
-                Mostrando {filteredLicenses.length} de {licensesSummary.length} licencias
+                Showing {filteredLicenses.length} of {licensesSummary.length} licenses
               </div>
             </CardContent>
           </Card>
@@ -307,7 +333,7 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
               <Card className="bg-zinc-900 border-zinc-800">
                 <CardContent className="py-12 text-center text-zinc-400">
                   <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-zinc-600" />
-                  Cargando licencias...
+                  Loading licenses...
                 </CardContent>
               </Card>
             ) : filteredLicenses.length === 0 ? (
@@ -316,88 +342,88 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                   {searchQuery ? (
                     <div>
                       <Search className="w-8 h-8 mx-auto mb-3 text-zinc-600" />
-                      <p>No hay licencias que coincidan con tu busqueda</p>
+                      <p>No licenses match your search</p>
                       <Button
                         variant="link"
                         onClick={() => setSearchQuery('')}
                         className="text-amber-400 mt-2"
                       >
-                        Limpiar busqueda
+                        Clear search
                       </Button>
                     </div>
                   ) : (
                     <div>
                       <Bell className="w-8 h-8 mx-auto mb-3 text-zinc-600" />
-                      <p>No hay alertas registradas todavia</p>
-                      <p className="text-sm mt-1">Las alertas apareceran aqui cuando se generen</p>
+                      <p>No alerts recorded yet</p>
+                      <p className="text-sm mt-1">Alerts will appear here when generated</p>
                     </div>
                   )}
                 </CardContent>
               </Card>
             ) : (
-              filteredLicenses.map((license) => (
-                <Card
-                  key={license.license_key}
-                  className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer group"
-                  onClick={() => {
-                    setSelectedLicenseForAlerts(license)
-                    setAlertsModalOpen(true)
-                  }}
-                >
-                  <CardContent className="py-4">
-                    <div className="flex items-center gap-4">
-                      {/* Icon indicator */}
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                        license.failed_alerts > 0
-                          ? 'bg-red-500/20'
-                          : 'bg-emerald-500/20'
-                      }`}>
-                        {license.failed_alerts > 0 ? (
-                          <AlertTriangle className="w-6 h-6 text-red-400" />
-                        ) : (
-                          <CheckCircle className="w-6 h-6 text-emerald-400" />
-                        )}
-                      </div>
-
-                      {/* License info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-semibold text-white truncate">
-                            {license.customer_name || 'Sin nombre'}
-                          </p>
+              filteredLicenses.map((license) => {
+                const iconConfig = getLicenseIcon(license)
+                return (
+                  <Card
+                    key={license.license_key}
+                    className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer group"
+                    onClick={() => {
+                      setSelectedLicenseForAlerts(license)
+                      setAlertsModalOpen(true)
+                    }}
+                  >
+                    <CardContent className="py-4">
+                      <div className="flex items-center gap-4">
+                        {/* Icon indicator */}
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${iconConfig.bg}`}>
+                          {iconConfig.icon}
                         </div>
-                        <code className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
-                          {license.license_key.slice(0, 16)}...
-                        </code>
-                        <div className="flex items-center gap-2 mt-2 text-xs text-zinc-500">
-                          <Clock className="w-3 h-3" />
-                          <span>Ultima alerta: {formatTimeAgo(license.last_alert_at)}</span>
-                        </div>
-                      </div>
 
-                      {/* Stats */}
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <div className="flex items-center gap-2">
-                            <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
-                              {license.failed_alerts} errores
-                            </Badge>
-                            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
-                              {license.success_alerts} ok
-                            </Badge>
+                        {/* License info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-semibold text-white truncate">
+                              {license.customer_name || 'No name'}
+                            </p>
                           </div>
-                          <p className="text-xs text-zinc-500 mt-1">
-                            {license.total_alerts} alertas totales
-                          </p>
+                          <code className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                            {license.license_key.slice(0, 16)}...
+                          </code>
+                          <div className="flex items-center gap-2 mt-2 text-xs text-zinc-500">
+                            <Clock className="w-3 h-3" />
+                            <span>Last alert: {formatTimeAgo(license.last_alert_at)}</span>
+                          </div>
                         </div>
 
-                        {/* Arrow indicator */}
-                        <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" />
+                        {/* Stats */}
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                                {license.failed_alerts} errors
+                              </Badge>
+                              {(license.ip_change_alerts || 0) > 0 && (
+                                <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs">
+                                  {license.ip_change_alerts} IP
+                                </Badge>
+                              )}
+                              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
+                                {license.success_alerts} ok
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-zinc-500 mt-1">
+                              {license.total_alerts} total alerts
+                            </p>
+                          </div>
+
+                          {/* Arrow indicator */}
+                          <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" />
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                    </CardContent>
+                  </Card>
+                )
+              })
             )}
           </div>
         </TabsContent>
@@ -408,17 +434,17 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <BellRing className="w-5 h-5 text-amber-400" />
-                Licencias con Alertas Activas
+                Licenses with Active Alerts
               </CardTitle>
             </CardHeader>
             <CardContent>
               {loadingLicenses ? (
-                <div className="py-8 text-center text-zinc-400">Cargando...</div>
+                <div className="py-8 text-center text-zinc-400">Loading...</div>
               ) : monitoredLicenses.length === 0 ? (
                 <div className="py-8 text-center text-zinc-400">
                   <Bell className="w-12 h-12 mx-auto mb-3 text-zinc-600" />
-                  <p>No hay licencias con alertas activas</p>
-                  <p className="text-sm mt-1">Activa alertas en una licencia para verla aqui</p>
+                  <p>No licenses with active alerts</p>
+                  <p className="text-sm mt-1">Enable alerts on a license to see it here</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -432,7 +458,7 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                           <Bell className="w-5 h-5 text-amber-400" />
                         </div>
                         <div>
-                          <p className="font-medium text-white">{license.customer_name || 'Sin nombre'}</p>
+                          <p className="font-medium text-white">{license.customer_name || 'No name'}</p>
                           <code className="text-xs text-emerald-400">{license.license_key}</code>
                         </div>
                       </div>
@@ -453,12 +479,12 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                           )}
                           {(license.alert_on_fail ?? true) && (
                             <Badge className="bg-red-500/20 text-red-400 text-xs">
-                              Error
+                              Fail
                             </Badge>
                           )}
                           {license.alert_on_success && (
                             <Badge className="bg-green-500/20 text-green-400 text-xs">
-                              Exito
+                              Success
                             </Badge>
                           )}
                         </div>

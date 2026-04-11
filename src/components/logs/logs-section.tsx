@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
-import { Search, X, Activity, CheckCircle, XCircle, Clock, MapPin, Laptop, CalendarDays } from 'lucide-react'
+import { Search, X, Activity, CheckCircle, XCircle, Clock, MapPin, Laptop, CalendarDays, ArrowLeftRight } from 'lucide-react'
 import type { CheckLog } from '@/lib/types'
 import { useLanguage } from '@/lib/language-context'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
@@ -119,11 +119,18 @@ export function LogsSection({ logs }: LogsSectionProps) {
     setDateTo(formatLocalDate(now))
   }
 
+  // Helper to detect IP change
+  const isIpChange = (log: CheckLog): boolean => {
+    const msg = (log.message || '').toLowerCase()
+    return msg.includes('ip change') || msg.includes('ip changed') || msg.includes('new ip') || msg.includes('different ip')
+  }
+
   // Calculate stats
   const stats = {
     total: logs.length,
-    success: logs.filter((l) => l.status === 'success' || l.status === 'valid').length,
-    failed: logs.filter((l) => l.status === 'invalid' || l.status === 'expired' || l.status === 'error').length,
+    success: logs.filter((l) => (l.status === 'success' || l.status === 'valid') && !isIpChange(l)).length,
+    failed: logs.filter((l) => (l.status === 'invalid' || l.status === 'expired' || l.status === 'error') && !isIpChange(l)).length,
+    ipChanges: logs.filter((l) => isIpChange(l)).length,
     today: logs.filter((l) => {
       const logDate = new Date(l.created_at)
       const today = new Date()
@@ -131,8 +138,18 @@ export function LogsSection({ logs }: LogsSectionProps) {
     }).length,
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
+  const getStatusBadge = (log: CheckLog) => {
+    // Check for IP change first
+    if (isIpChange(log)) {
+      return (
+        <Badge className="bg-orange-500/20 text-orange-400 hover:bg-orange-500/30">
+          <ArrowLeftRight className="h-3 w-3 mr-1" />
+          IP Change
+        </Badge>
+      )
+    }
+
+    switch (log.status) {
       case 'success':
       case 'valid':
         return (
@@ -159,7 +176,7 @@ export function LogsSection({ logs }: LogsSectionProps) {
       default:
         return (
           <Badge className="bg-zinc-500/20 text-zinc-400">
-            {status}
+            {log.status}
           </Badge>
         )
     }
@@ -188,6 +205,13 @@ export function LogsSection({ logs }: LogsSectionProps) {
       bgColor: 'bg-red-500/10',
     },
     {
+      title: 'IP Changes',
+      value: stats.ipChanges,
+      icon: ArrowLeftRight,
+      color: 'text-orange-400',
+      bgColor: 'bg-orange-500/10',
+    },
+    {
       title: t('todayChecks'),
       value: stats.today,
       icon: Clock,
@@ -205,7 +229,7 @@ export function LogsSection({ logs }: LogsSectionProps) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {statCards.map((card) => (
           <Card key={card.title} className="bg-zinc-900/50 border-zinc-800">
             <CardContent className="p-4">
@@ -404,7 +428,7 @@ export function LogsSection({ logs }: LogsSectionProps) {
                     </span>
                   </TableCell>
                   <TableCell>
-                    {getStatusBadge(log.status)}
+                    {getStatusBadge(log)}
                   </TableCell>
                   <TableCell className="max-w-[200px]">
                     <span className="text-xs text-zinc-500 truncate block">
