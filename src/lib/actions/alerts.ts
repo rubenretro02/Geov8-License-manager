@@ -14,6 +14,16 @@ interface CheckLogWithLicense extends CheckLog {
   } | null
 }
 
+// Type for license with alerts summary
+export interface LicenseAlertsSummary {
+  license_key: string
+  customer_name: string | null
+  total_alerts: number
+  failed_alerts: number
+  success_alerts: number
+  last_alert_at: string | null
+}
+
 export async function getAlertLogs(
   statusFilter: 'all' | 'error' | 'success' = 'all',
   typeFilter: 'all' | 'ip' | 'gps' = 'all'
@@ -105,6 +115,185 @@ export async function getAlertLogs(
       customer_name: licenseData?.customer_name || null,
     }
   })
+}
+
+// Get alerts for a specific license
+export async function getAlertsByLicense(
+  licenseKey: string,
+  statusFilter: 'all' | 'error' | 'success' = 'all',
+  typeFilter: 'all' | 'ip' | 'gps' = 'all'
+): Promise<CheckLog[]> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+
+  if (!profile) return []
+
+  // Verify user has access to this license
+  let accessQuery = supabase
+    .from('licenses')
+    .select('license_key, customer_name')
+    .eq('license_key', licenseKey)
+
+  // Filter by role
+  if (profile.role === 'user') {
+    accessQuery = accessQuery.eq('created_by', profile.id)
+  } else if (profile.role === 'admin') {
+    accessQuery = accessQuery.eq('admin_id', profile.id)
+  }
+  // super_admin can access all
+
+  const { data: licenseData, error: accessError } = await accessQuery.single()
+
+  if (accessError || !licenseData) {
+    console.error('Access denied or license not found:', accessError)
+    return []
+  }
+
+  // Get check logs for this specific license
+  let query = supabase
+    .from('check_logs')
+    .select('*')
+    .eq('license_key', licenseKey)
+    .order('created_at', { ascending: false })
+
+  // Filter by status
+  if (statusFilter === 'error') {
+    query = query.neq('status', 'valid')
+  } else if (statusFilter === 'success') {
+    query = query.eq('status', 'valid')
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    console.error('Error fetching license alerts:', error)
+    return []
+  }
+
+  if (!data || data.length === 0) return []
+
+  // Filter by type (IP/GPS) if needed
+  let filteredData = data
+
+  if (typeFilter === 'ip') {
+    filteredData = filteredData.filter((log) => {
+      const msg = (log.message || '').toLowerCase()
+      return msg.includes('ip') || msg.includes('country') || msg.includes('location')
+    })
+  } else if (typeFilter === 'gps') {
+    filteredData = filteredData.filter((log) => {
+      const msg = (log.message || '').toLowerCase()
+      return msg.includes('gps') || msg.includes('coordinate')
+    })
+  }
+
+  // Map to include customer_name
+  return filteredData.map((log) => ({
+    ...log,
+    customer_name: licenseData.customer_name || null,
+  }))
+}
+
+// Get all licenses with their alerts summary (grouped view)
+export async function getLicensesWithAlertsSummary(): Promise<LicenseAlertsSummary[]> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+
+  if (!profile) return []
+
+  // Get all licenses for this user
+  let licensesQuery = supabase
+    .from('licenses')
+    .select('license_key, customer_name')
+
+  // Filter by role
+  if (profile.role === 'user') {
+    licensesQuery = licensesQuery.eq('created_by', profile.id)
+  } else if (profile.role === 'admin') {
+    licensesQuery = licensesQuery.eq('admin_id', profile.id)
+  }
+  // super_admin sees all
+
+  const { data: userLicenses, error: licensesError } = await licensesQuery
+
+  if (licensesError || !userLicenses || userLicenses.length === 0) {
+    return []
+  }
+
+  const licenseKeys = userLicenses.map(l => l.license_key)
+
+  // Create map for quick lookup of customer names
+  const licenseMap = new Map<string, string | null>()
+  userLicenses.forEach(l => {
+    licenseMap.set(l.license_key, l.customer_name)
+  })
+
+  // Get all check logs for these licenses
+  const { data: allLogs, error: logsError } = await supabase
+    .from('check_logs')
+    .select('license_key, status, created_at')
+    .in('license_key', licenseKeys)
+    .order('created_at', { ascending: false })
+
+  if (logsError) {
+    console.error('Error fetching logs summary:', logsError)
+    return []
+  }
+
+  // Group logs by license
+  const licenseLogsMap = new Map<string, { total: number; failed: number; success: number; lastAt: string | null }>()
+
+  // Initialize with all licenses (even those with 0 logs)
+  userLicenses.forEach(l => {
+    licenseLogsMap.set(l.license_key, { total: 0, failed: 0, success: 0, lastAt: null })
+  })
+
+  // Count logs
+  allLogs?.forEach(log => {
+    const key = log.license_key
+    if (!key) return
+
+    const current = licenseLogsMap.get(key) || { total: 0, failed: 0, success: 0, lastAt: null }
+    current.total++
+
+    if (log.status === 'valid' || log.status === 'success') {
+      current.success++
+    } else {
+      current.failed++
+    }
+
+    // Track most recent alert
+    if (!current.lastAt || new Date(log.created_at) > new Date(current.lastAt)) {
+      current.lastAt = log.created_at
+    }
+
+    licenseLogsMap.set(key, current)
+  })
+
+  // Convert to array, only include licenses that have at least 1 log
+  const result: LicenseAlertsSummary[] = []
+
+  licenseLogsMap.forEach((stats, licenseKey) => {
+    if (stats.total > 0) {
+      result.push({
+        license_key: licenseKey,
+        customer_name: licenseMap.get(licenseKey) || null,
+        total_alerts: stats.total,
+        failed_alerts: stats.failed,
+        success_alerts: stats.success,
+        last_alert_at: stats.lastAt,
+      })
+    }
+  })
+
+  // Sort by most recent alert first
+  result.sort((a, b) => {
+    if (!a.last_alert_at) return 1
+    if (!b.last_alert_at) return -1
+    return new Date(b.last_alert_at).getTime() - new Date(a.last_alert_at).getTime()
+  })
+
+  return result
 }
 
 export async function getMonitoredLicenses(): Promise<License[]> {

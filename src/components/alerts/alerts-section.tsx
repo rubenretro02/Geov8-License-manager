@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Profile, CheckLog, License } from '@/lib/types'
+import { Profile, License } from '@/lib/types'
+import { LicenseAlertsSummary as LicenseAlertsSummaryType } from '@/lib/actions/alerts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,44 +10,62 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
-import { AlertTriangle, CheckCircle, RefreshCw, Bell, Filter, BellRing, Wifi, MapPin, Settings, Search, X, CalendarDays } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle,
+  RefreshCw,
+  Bell,
+  BellRing,
+  Wifi,
+  MapPin,
+  Settings,
+  Search,
+  X,
+  ChevronRight,
+  FileText,
+  Clock,
+  Shield,
+  Filter
+} from 'lucide-react'
 import { AlertSettingsDialog } from '@/components/dashboard/alert-settings-dialog'
-import { getAlertLogs, getMonitoredLicenses } from '@/lib/actions/alerts'
+import { getLicensesWithAlertsSummary, getMonitoredLicenses } from '@/lib/actions/alerts'
 import { updateLicenseAlerts } from '@/lib/actions/licenses'
 import { toast } from 'sonner'
+import { LicenseAlertsModal } from './license-alerts-modal'
 
 interface AlertsSectionProps {
   profile: Profile
 }
 
 export function AlertsSection({ profile }: AlertsSectionProps) {
-  const [logs, setLogs] = useState<CheckLog[]>([])
+  const [licensesSummary, setLicensesSummary] = useState<LicenseAlertsSummaryType[]>([])
   const [monitoredLicenses, setMonitoredLicenses] = useState<License[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingLicenses, setLoadingLicenses] = useState(true)
-  const [filter, setFilter] = useState<'all' | 'error' | 'success'>('all')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'ip' | 'gps'>('all')
-  const [activeTab, setActiveTab] = useState('logs')
+  const [activeTab, setActiveTab] = useState('licenses')
 
-  // Search filter - like Ctrl+F
+  // Search filter for licenses list
   const [searchQuery, setSearchQuery] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [sortBy, setSortBy] = useState<'recent' | 'errors' | 'total'>('recent')
 
   // Alert settings dialog
-  const [selectedLicense, setSelectedLicense] = useState<License | null>(null)
+  const [selectedLicenseForSettings, setSelectedLicenseForSettings] = useState<License | null>(null)
   const [alertDialogOpen, setAlertDialogOpen] = useState(false)
 
-  const loadAlerts = useCallback(async () => {
+  // License alerts modal
+  const [selectedLicenseForAlerts, setSelectedLicenseForAlerts] = useState<LicenseAlertsSummaryType | null>(null)
+  const [alertsModalOpen, setAlertsModalOpen] = useState(false)
+
+  const loadLicensesSummary = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await getAlertLogs(filter, typeFilter)
-      setLogs(data)
+      const data = await getLicensesWithAlertsSummary()
+      setLicensesSummary(data)
     } catch (error) {
-      console.error('Error loading alerts:', error)
+      console.error('Error loading licenses summary:', error)
     }
     setLoading(false)
-  }, [filter, typeFilter])
+  }, [])
 
   const loadMonitoredLicenses = useCallback(async () => {
     setLoadingLicenses(true)
@@ -60,54 +79,46 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
   }, [])
 
   useEffect(() => {
-    loadAlerts()
+    loadLicensesSummary()
     loadMonitoredLicenses()
     const interval = setInterval(() => {
-      loadAlerts()
+      loadLicensesSummary()
       loadMonitoredLicenses()
     }, 30000)
     return () => clearInterval(interval)
-  }, [loadAlerts, loadMonitoredLicenses])
+  }, [loadLicensesSummary, loadMonitoredLicenses])
 
-  // Comprehensive search filter - like Ctrl+F
-  const filteredLogs = useMemo(() => {
-    let result = [...logs]
+  // Filter and sort licenses
+  const filteredLicenses = useMemo(() => {
+    let result = [...licensesSummary]
 
-    // Apply text search filter (searches everywhere like Ctrl+F)
+    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
-      result = result.filter((log) => {
-        // Search in all relevant fields
+      result = result.filter((license) => {
         const searchableText = [
-          log.license_key || '',
-          log.customer_name || '',
-          log.hwid || '',
-          log.ip_address || '',
-          log.ip_city || '',
-          log.ip_state || '',
-          log.ip_country || '',
-          log.message || '',
-          log.status || '',
-          new Date(log.created_at).toLocaleString(),
+          license.license_key || '',
+          license.customer_name || '',
         ].join(' ').toLowerCase()
-
         return searchableText.includes(query)
       })
     }
 
-    // Apply date filters
-    if (dateFrom) {
-      const fromDate = new Date(dateFrom + 'T00:00:00')
-      result = result.filter((log) => new Date(log.created_at) >= fromDate)
-    }
-
-    if (dateTo) {
-      const toDate = new Date(dateTo + 'T23:59:59.999')
-      result = result.filter((log) => new Date(log.created_at) <= toDate)
-    }
+    // Apply sorting
+    result.sort((a, b) => {
+      if (sortBy === 'recent') {
+        if (!a.last_alert_at) return 1
+        if (!b.last_alert_at) return -1
+        return new Date(b.last_alert_at).getTime() - new Date(a.last_alert_at).getTime()
+      } else if (sortBy === 'errors') {
+        return b.failed_alerts - a.failed_alerts
+      } else {
+        return b.total_alerts - a.total_alerts
+      }
+    })
 
     return result
-  }, [logs, searchQuery, dateFrom, dateTo])
+  }, [licensesSummary, searchQuery, sortBy])
 
   const handleToggleAlert = async (license: License, enabled: boolean) => {
     const result = await updateLicenseAlerts(license.license_key, {
@@ -118,86 +129,41 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
       alert_on_success: license.alert_on_success ?? false,
     })
     if (result.success) {
-      toast.success(enabled ? 'Alerts enabled' : 'Alerts disabled')
+      toast.success(enabled ? 'Alertas activadas' : 'Alertas desactivadas')
       loadMonitoredLicenses()
     } else {
-      toast.error(result.error || 'Error updating alerts')
+      toast.error(result.error || 'Error actualizando alertas')
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    if (status === 'success') {
-      return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Success</Badge>
-    }
-    return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Failed</Badge>
-  }
-
-  const getAlertIcon = (status: string) => {
-    if (status === 'success') {
-      return <CheckCircle className="w-5 h-5 text-emerald-400" />
-    }
-    return <AlertTriangle className="w-5 h-5 text-red-400" />
-  }
-
-  const formatTime = (dateString: string) => {
+  const formatTimeAgo = (dateString: string | null) => {
+    if (!dateString) return 'Nunca'
     const date = new Date(dateString)
-    return date.toLocaleString()
-  }
-
-  const getErrorType = (message: string | null): 'ip' | 'gps' | 'other' => {
-    if (!message) return 'other'
-    const msgLower = message.toLowerCase()
-    if (msgLower.includes('ip:') || msgLower.includes('ip location')) return 'ip'
-    if (msgLower.includes('gps:') || msgLower.includes('coordinate')) return 'gps'
-    return 'other'
-  }
-
-  // Helper to format date as YYYY-MM-DD in LOCAL timezone
-  const formatLocalDate = (date: Date): string => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-
-  // Quick date shortcuts
-  const setToday = () => {
-    const today = formatLocalDate(new Date())
-    setDateFrom(today)
-    setDateTo(today)
-  }
-
-  const setThisWeek = () => {
     const now = new Date()
-    const dayOfWeek = now.getDay()
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
-    setDateFrom(formatLocalDate(monday))
-    setDateTo(formatLocalDate(now))
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return 'Ahora mismo'
+    if (diffMins < 60) return `hace ${diffMins}m`
+    if (diffHours < 24) return `hace ${diffHours}h`
+    if (diffDays === 1) return 'Ayer'
+    if (diffDays < 7) return `hace ${diffDays}d`
+    return date.toLocaleDateString()
   }
 
-  const setThisMonth = () => {
-    const now = new Date()
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-    setDateFrom(formatLocalDate(firstDay))
-    setDateTo(formatLocalDate(now))
-  }
-
-  const setLastMonth = () => {
-    const now = new Date()
-    const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-    setDateFrom(formatLocalDate(firstDayLastMonth))
-    setDateTo(formatLocalDate(lastDayLastMonth))
-  }
-
-  const clearFilters = () => {
-    setSearchQuery('')
-    setDateFrom('')
-    setDateTo('')
-  }
-
-  const hasFilters = searchQuery || dateFrom || dateTo
+  // Calculate totals
+  const totals = useMemo(() => {
+    return licensesSummary.reduce(
+      (acc, license) => ({
+        total: acc.total + license.total_alerts,
+        failed: acc.failed + license.failed_alerts,
+        success: acc.success + license.success_alerts,
+      }),
+      { total: 0, failed: 0, success: 0 }
+    )
+  }, [licensesSummary])
 
   return (
     <div className="space-y-6">
@@ -206,47 +172,101 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
         <div className="flex items-center gap-3">
           <Bell className="w-8 h-8 text-amber-400" />
           <div>
-            <h1 className="text-2xl font-bold text-white">Alerts</h1>
-            <p className="text-zinc-400 text-sm">Monitor check results in real-time</p>
+            <h1 className="text-2xl font-bold text-white">Centro de Alertas</h1>
+            <p className="text-zinc-400 text-sm">Monitorea tus licencias de forma organizada</p>
           </div>
         </div>
         <Button
           variant="outline"
           size="sm"
-          onClick={() => { loadAlerts(); loadMonitoredLicenses(); }}
+          onClick={() => { loadLicensesSummary(); loadMonitoredLicenses(); }}
           disabled={loading}
           className="border-zinc-700"
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          Actualizar
         </Button>
+      </div>
+
+      {/* Stats Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-zinc-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-white">{totals.total}</p>
+                <p className="text-xs text-zinc-500">Total Alertas</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-red-400">{totals.failed}</p>
+                <p className="text-xs text-zinc-500">Errores</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-emerald-400">{totals.success}</p>
+                <p className="text-xs text-zinc-500">Exitosos</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-white">{licensesSummary.length}</p>
+                <p className="text-xs text-zinc-500">Licencias con Logs</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-zinc-800 border-zinc-700">
-          <TabsTrigger value="logs" className="data-[state=active]:bg-zinc-700">
-            <AlertTriangle className="w-4 h-4 mr-2" />
-            Alert Logs
+          <TabsTrigger value="licenses" className="data-[state=active]:bg-zinc-700">
+            <FileText className="w-4 h-4 mr-2" />
+            Alertas por Licencia
           </TabsTrigger>
           <TabsTrigger value="monitored" className="data-[state=active]:bg-zinc-700">
             <BellRing className="w-4 h-4 mr-2" />
-            Monitored ({monitoredLicenses.length})
+            Monitoreadas ({monitoredLicenses.length})
           </TabsTrigger>
         </TabsList>
 
-        {/* Alert Logs Tab */}
-        <TabsContent value="logs" className="space-y-4 mt-4">
-          {/* Filters Card */}
+        {/* Licenses with Alerts Tab */}
+        <TabsContent value="licenses" className="space-y-4 mt-4">
+          {/* Filters */}
           <Card className="bg-zinc-900 border-zinc-800">
-            <CardContent className="py-4 space-y-4">
-              {/* Row 1: Search and Status Filters */}
+            <CardContent className="py-4">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                {/* Search Input - like Ctrl+F */}
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                   <Input
-                    placeholder="Search by IP, license, name, HWID, location, message..."
+                    placeholder="Buscar por nombre o clave de licencia..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-9 bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
@@ -261,181 +281,118 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                     </button>
                   )}
                 </div>
-
                 <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4 text-zinc-400" />
-                  <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-                    <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-700">
-                      <SelectValue placeholder="Status" />
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+                    <SelectTrigger className="w-[160px] bg-zinc-800 border-zinc-700">
+                      <SelectValue placeholder="Ordenar por" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="error">Failed Only</SelectItem>
-                      <SelectItem value="success">Success Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as typeof typeFilter)}>
-                    <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-700">
-                      <SelectValue placeholder="Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="ip">IP Errors</SelectItem>
-                      <SelectItem value="gps">GPS Errors</SelectItem>
+                      <SelectItem value="recent">Mas reciente</SelectItem>
+                      <SelectItem value="errors">Mas errores</SelectItem>
+                      <SelectItem value="total">Mas alertas</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-
-              {/* Row 2: Date Range Filter */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-3 border-t border-zinc-800">
-                <div className="flex items-center gap-2 text-zinc-400">
-                  <CalendarDays className="h-4 w-4" />
-                  <span className="text-sm font-medium">Date:</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="w-[150px] bg-zinc-800 border-zinc-700 text-white [color-scheme:dark]"
-                  />
-                  <span className="text-zinc-500 text-sm">to</span>
-                  <Input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="w-[150px] bg-zinc-800 border-zinc-700 text-white [color-scheme:dark]"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={setToday}
-                    className={`text-xs border-zinc-700 ${
-                      dateFrom === formatLocalDate(new Date()) && dateTo === formatLocalDate(new Date())
-                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-                    }`}
-                  >
-                    Today
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={setThisWeek}
-                    className="text-xs border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
-                  >
-                    This Week
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={setThisMonth}
-                    className="text-xs border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800"
-                  >
-                    This Month
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={setLastMonth}
-                    className="text-xs border-zinc-700 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                  >
-                    Last Month
-                  </Button>
-                  {hasFilters && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearFilters}
-                      className="text-xs text-zinc-500 hover:text-white"
-                    >
-                      <X className="h-3 w-3 mr-1" />
-                      Clear
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Row 3: Results Info */}
-              <div className="flex items-center justify-between text-sm text-zinc-500 pt-2 border-t border-zinc-800">
-                <span>
-                  Showing {filteredLogs.length} of {logs.length} alerts
-                  {hasFilters && ' (filtered)'}
-                </span>
-                <span>Auto-refresh: 30s</span>
+              <div className="mt-3 text-sm text-zinc-500">
+                Mostrando {filteredLicenses.length} de {licensesSummary.length} licencias
               </div>
             </CardContent>
           </Card>
 
-          {/* Alerts List */}
+          {/* Licenses List */}
           <div className="space-y-3">
-            {loading && logs.length === 0 ? (
+            {loading && licensesSummary.length === 0 ? (
               <Card className="bg-zinc-900 border-zinc-800">
-                <CardContent className="py-8 text-center text-zinc-400">
-                  Loading alerts...
+                <CardContent className="py-12 text-center text-zinc-400">
+                  <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-zinc-600" />
+                  Cargando licencias...
                 </CardContent>
               </Card>
-            ) : filteredLogs.length === 0 ? (
+            ) : filteredLicenses.length === 0 ? (
               <Card className="bg-zinc-900 border-zinc-800">
-                <CardContent className="py-8 text-center text-zinc-400">
-                  {hasFilters ? (
+                <CardContent className="py-12 text-center text-zinc-400">
+                  {searchQuery ? (
                     <div>
-                      <p>No alerts match your search</p>
+                      <Search className="w-8 h-8 mx-auto mb-3 text-zinc-600" />
+                      <p>No hay licencias que coincidan con tu busqueda</p>
                       <Button
                         variant="link"
-                        onClick={clearFilters}
+                        onClick={() => setSearchQuery('')}
                         className="text-amber-400 mt-2"
                       >
-                        Clear filters
+                        Limpiar busqueda
                       </Button>
                     </div>
                   ) : (
-                    'No alerts found'
+                    <div>
+                      <Bell className="w-8 h-8 mx-auto mb-3 text-zinc-600" />
+                      <p>No hay alertas registradas todavia</p>
+                      <p className="text-sm mt-1">Las alertas apareceran aqui cuando se generen</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
             ) : (
-              filteredLogs.map((log) => (
+              filteredLicenses.map((license) => (
                 <Card
-                  key={log.id}
-                  className={`bg-zinc-900 border-l-4 ${
-                    log.status === 'success'
-                      ? 'border-l-emerald-500 border-zinc-800'
-                      : 'border-l-red-500 border-zinc-800'
-                  }`}
+                  key={license.license_key}
+                  className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer group"
+                  onClick={() => {
+                    setSelectedLicenseForAlerts(license)
+                    setAlertsModalOpen(true)
+                  }}
                 >
                   <CardContent className="py-4">
-                    <div className="flex items-start gap-4">
-                      {getAlertIcon(log.status)}
+                    <div className="flex items-center gap-4">
+                      {/* Icon indicator */}
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                        license.failed_alerts > 0
+                          ? 'bg-red-500/20'
+                          : 'bg-emerald-500/20'
+                      }`}>
+                        {license.failed_alerts > 0 ? (
+                          <AlertTriangle className="w-6 h-6 text-red-400" />
+                        ) : (
+                          <CheckCircle className="w-6 h-6 text-emerald-400" />
+                        )}
+                      </div>
+
+                      {/* License info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          {getStatusBadge(log.status)}
-                          <Badge variant="outline" className="text-xs border-zinc-700">
-                            {getErrorType(log.message).toUpperCase()}
-                          </Badge>
-                          <span className="text-xs text-zinc-500">
-                            {formatTime(log.created_at)}
-                          </span>
+                          <p className="font-semibold text-white truncate">
+                            {license.customer_name || 'Sin nombre'}
+                          </p>
                         </div>
-                        <p className="text-sm font-medium text-white mb-1">
-                          {log.customer_name || 'Unknown'} • {log.license_key?.slice(0, 8)}...
-                        </p>
-                        <p className="text-sm text-red-400 font-mono">
-                          {log.message || 'No message'}
-                        </p>
-                        <div className="flex flex-wrap gap-4 mt-2 text-xs text-zinc-500">
-                          <span>IP: {log.ip_address || '--'}</span>
-                          <span>Location: {[log.ip_city, log.ip_state, log.ip_country].filter(Boolean).join(', ') || '--'}</span>
-                          {log.hwid && <span>HWID: ...{log.hwid.slice(-8)}</span>}
+                        <code className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                          {license.license_key.slice(0, 16)}...
+                        </code>
+                        <div className="flex items-center gap-2 mt-2 text-xs text-zinc-500">
+                          <Clock className="w-3 h-3" />
+                          <span>Ultima alerta: {formatTimeAgo(license.last_alert_at)}</span>
                         </div>
+                      </div>
+
+                      {/* Stats */}
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                              {license.failed_alerts} errores
+                            </Badge>
+                            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
+                              {license.success_alerts} ok
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-zinc-500 mt-1">
+                            {license.total_alerts} alertas totales
+                          </p>
+                        </div>
+
+                        {/* Arrow indicator */}
+                        <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" />
                       </div>
                     </div>
                   </CardContent>
@@ -451,17 +408,17 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <BellRing className="w-5 h-5 text-amber-400" />
-                Licenses with Alerts Enabled
+                Licencias con Alertas Activas
               </CardTitle>
             </CardHeader>
             <CardContent>
               {loadingLicenses ? (
-                <div className="py-8 text-center text-zinc-400">Loading...</div>
+                <div className="py-8 text-center text-zinc-400">Cargando...</div>
               ) : monitoredLicenses.length === 0 ? (
                 <div className="py-8 text-center text-zinc-400">
                   <Bell className="w-12 h-12 mx-auto mb-3 text-zinc-600" />
-                  <p>No licenses with alerts enabled</p>
-                  <p className="text-sm mt-1">Enable alerts on a license to see it here</p>
+                  <p>No hay licencias con alertas activas</p>
+                  <p className="text-sm mt-1">Activa alertas en una licencia para verla aqui</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -475,7 +432,7 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                           <Bell className="w-5 h-5 text-amber-400" />
                         </div>
                         <div>
-                          <p className="font-medium text-white">{license.customer_name || 'No name'}</p>
+                          <p className="font-medium text-white">{license.customer_name || 'Sin nombre'}</p>
                           <code className="text-xs text-emerald-400">{license.license_key}</code>
                         </div>
                       </div>
@@ -496,12 +453,12 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                           )}
                           {(license.alert_on_fail ?? true) && (
                             <Badge className="bg-red-500/20 text-red-400 text-xs">
-                              Fail
+                              Error
                             </Badge>
                           )}
                           {license.alert_on_success && (
                             <Badge className="bg-green-500/20 text-green-400 text-xs">
-                              Success
+                              Exito
                             </Badge>
                           )}
                         </div>
@@ -510,7 +467,7 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
                           variant="ghost"
                           size="icon"
                           onClick={() => {
-                            setSelectedLicense(license)
+                            setSelectedLicenseForSettings(license)
                             setAlertDialogOpen(true)
                           }}
                           className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-700"
@@ -534,18 +491,25 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
       </Tabs>
 
       {/* Alert Settings Dialog */}
-      {selectedLicense && (
+      {selectedLicenseForSettings && (
         <AlertSettingsDialog
-          license={selectedLicense}
+          license={selectedLicenseForSettings}
           open={alertDialogOpen}
           onOpenChange={(open) => {
             setAlertDialogOpen(open)
             if (!open) {
-              loadMonitoredLicenses() // Refresh after closing
+              loadMonitoredLicenses()
             }
           }}
         />
       )}
+
+      {/* License Alerts Modal */}
+      <LicenseAlertsModal
+        license={selectedLicenseForAlerts}
+        open={alertsModalOpen}
+        onOpenChange={setAlertsModalOpen}
+      />
     </div>
   )
 }
