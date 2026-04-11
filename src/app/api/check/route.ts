@@ -131,7 +131,6 @@ async function sendTelegramAlert(
   }
 
   // Build message - handle ip_change as warning (orange)
-  const isIpChange = status === 'ip_change'
   const icon = isIpChange ? '🟠' : (isFailure ? '🔴' : '🟢')
   const title = isIpChange ? 'IP CHANGED' : (isFailure ? 'CHECK FAILED' : 'CHECK PASSED')
   const detailIcon = isIpChange ? '⚠️' : (isFailure ? '❌' : '✅')
