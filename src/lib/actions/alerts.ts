@@ -231,18 +231,6 @@ export async function getLicensesWithAlertsSummary(): Promise<LicenseAlertsSumma
     licenseMap.set(l.license_key, l.customer_name)
   })
 
-  // Get all check logs for these licenses
-  const { data: allLogs, error: logsError } = await supabase
-    .from('check_logs')
-    .select('license_key, status, created_at')
-    .in('license_key', licenseKeys)
-    .order('created_at', { ascending: false })
-
-  if (logsError) {
-    console.error('Error fetching logs summary:', logsError)
-    return []
-  }
-
   // Group logs by license
   const licenseLogsMap = new Map<string, { total: number; failed: number; success: number; ipChange: number; lastAt: string | null }>()
 
@@ -251,12 +239,18 @@ export async function getLicensesWithAlertsSummary(): Promise<LicenseAlertsSumma
     licenseLogsMap.set(l.license_key, { total: 0, failed: 0, success: 0, ipChange: 0, lastAt: null })
   })
 
-  // Get messages for IP change detection
-  const { data: logsWithMessages } = await supabase
+  // Get all check logs for these licenses (no limit to get accurate counts)
+  const { data: logsWithMessages, error: logsError } = await supabase
     .from('check_logs')
     .select('license_key, status, message, created_at')
     .in('license_key', licenseKeys)
     .order('created_at', { ascending: false })
+    .limit(10000) // Increase limit to get accurate counts
+
+  if (logsError) {
+    console.error('Error fetching logs summary:', logsError)
+    return []
+  }
 
   // Count logs
   logsWithMessages?.forEach(log => {

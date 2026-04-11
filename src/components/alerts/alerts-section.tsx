@@ -49,6 +49,9 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'recent' | 'errors' | 'total'>('recent')
 
+  // Filter by alert type (from stat cards)
+  const [alertTypeFilter, setAlertTypeFilter] = useState<'all' | 'errors' | 'ip_changes' | 'success'>('all')
+
   // Alert settings dialog
   const [selectedLicenseForSettings, setSelectedLicenseForSettings] = useState<License | null>(null)
   const [alertDialogOpen, setAlertDialogOpen] = useState(false)
@@ -93,6 +96,15 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
   const filteredLicenses = useMemo(() => {
     let result = [...licensesSummary]
 
+    // Apply alert type filter (from stat cards)
+    if (alertTypeFilter === 'errors') {
+      result = result.filter((license) => license.failed_alerts > 0)
+    } else if (alertTypeFilter === 'ip_changes') {
+      result = result.filter((license) => (license.ip_change_alerts || 0) > 0)
+    } else if (alertTypeFilter === 'success') {
+      result = result.filter((license) => license.success_alerts > 0 && license.failed_alerts === 0 && (license.ip_change_alerts || 0) === 0)
+    }
+
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
@@ -119,7 +131,7 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
     })
 
     return result
-  }, [licensesSummary, searchQuery, sortBy])
+  }, [licensesSummary, searchQuery, sortBy, alertTypeFilter])
 
   const handleToggleAlert = async (license: License, enabled: boolean) => {
     const result = await updateLicenseAlerts(license.license_key, {
@@ -201,9 +213,12 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
         </Button>
       </div>
 
-      {/* Stats Summary */}
+      {/* Stats Summary - Clickable */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card
+          className={`bg-zinc-900 border-zinc-800 cursor-pointer transition-all hover:border-zinc-600 ${alertTypeFilter === 'all' ? 'ring-2 ring-zinc-500' : ''}`}
+          onClick={() => setAlertTypeFilter('all')}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center">
@@ -216,7 +231,10 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card
+          className={`bg-zinc-900 border-zinc-800 cursor-pointer transition-all hover:border-red-500/50 ${alertTypeFilter === 'errors' ? 'ring-2 ring-red-500' : ''}`}
+          onClick={() => setAlertTypeFilter(alertTypeFilter === 'errors' ? 'all' : 'errors')}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
@@ -229,7 +247,10 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card
+          className={`bg-zinc-900 border-zinc-800 cursor-pointer transition-all hover:border-orange-500/50 ${alertTypeFilter === 'ip_changes' ? 'ring-2 ring-orange-500' : ''}`}
+          onClick={() => setAlertTypeFilter(alertTypeFilter === 'ip_changes' ? 'all' : 'ip_changes')}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
@@ -242,7 +263,10 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card
+          className={`bg-zinc-900 border-zinc-800 cursor-pointer transition-all hover:border-emerald-500/50 ${alertTypeFilter === 'success' ? 'ring-2 ring-emerald-500' : ''}`}
+          onClick={() => setAlertTypeFilter(alertTypeFilter === 'success' ? 'all' : 'success')}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
@@ -269,6 +293,30 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Active filter indicator */}
+      {alertTypeFilter !== 'all' && (
+        <div className="flex items-center gap-2">
+          <Badge
+            className={`${
+              alertTypeFilter === 'errors' ? 'bg-red-500/20 text-red-400' :
+              alertTypeFilter === 'ip_changes' ? 'bg-orange-500/20 text-orange-400' :
+              'bg-emerald-500/20 text-emerald-400'
+            }`}
+          >
+            Filtering: {alertTypeFilter === 'errors' ? 'Errors' : alertTypeFilter === 'ip_changes' ? 'IP Changes' : 'Successful'}
+          </Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAlertTypeFilter('all')}
+            className="h-6 px-2 text-xs text-zinc-400 hover:text-white"
+          >
+            <X className="w-3 h-3 mr-1" />
+            Clear
+          </Button>
+        </div>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -323,6 +371,7 @@ export function AlertsSection({ profile }: AlertsSectionProps) {
               </div>
               <div className="mt-3 text-sm text-zinc-500">
                 Showing {filteredLicenses.length} of {licensesSummary.length} licenses
+                {alertTypeFilter !== 'all' && ` (filtered by ${alertTypeFilter === 'errors' ? 'errors' : alertTypeFilter === 'ip_changes' ? 'IP changes' : 'successful'})`}
               </div>
             </CardContent>
           </Card>
