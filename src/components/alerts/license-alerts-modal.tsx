@@ -90,9 +90,29 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
 
   // Check if log is IP change
   const checkIsIpChange = (log: CheckLog): boolean => {
+    if (log.status === 'ip_change') return true
     const msg = (log.message || '').toLowerCase()
     return msg.includes('ip change') || msg.includes('ip changed') || msg.includes('new ip') || msg.includes('different ip')
   }
+
+  // Calculate real counts from loaded logs
+  const realCounts = useMemo(() => {
+    let errors = 0
+    let success = 0
+    let ipChanges = 0
+
+    logs.forEach(log => {
+      if (checkIsIpChange(log)) {
+        ipChanges++
+      } else if (log.status === 'valid' || log.status === 'success') {
+        success++
+      } else {
+        errors++
+      }
+    })
+
+    return { errors, success, ipChanges, total: logs.length }
+  }, [logs])
 
   // Apply client-side filters
   const filteredLogs = useMemo(() => {
@@ -239,15 +259,15 @@ export function LicenseAlertsModal({ license, open, onOpenChange }: LicenseAlert
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
-                  {license.failed_alerts} errors
+                  {realCounts.errors} errors
                 </Badge>
-                {(license.ip_change_alerts || 0) > 0 && (
+                {realCounts.ipChanges > 0 && (
                   <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">
-                    {license.ip_change_alerts} IP
+                    {realCounts.ipChanges} IP
                   </Badge>
                 )}
                 <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                  {license.success_alerts} ok
+                  {realCounts.success} ok
                 </Badge>
               </div>
               <Button
