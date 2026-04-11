@@ -239,43 +239,63 @@ export async function getLicensesWithAlertsSummary(): Promise<LicenseAlertsSumma
     licenseLogsMap.set(l.license_key, { total: 0, failed: 0, success: 0, ipChange: 0, lastAt: null })
   })
 
-  // Get all check logs for these licenses (no limit to get accurate counts)
-  const { data: logsWithMessages, error: logsError } = await supabase
-    .from('check_logs')
-    .select('license_key, status, message, created_at')
-    .in('license_key', licenseKeys)
-    .order('created_at', { ascending: false })
-    .limit(10000) // Increase limit to get accurate counts
+  // Get counts for each license using multiple smaller queries to avoid limits
+  // Process licenses in batches
+  const batchSize = 50
+  for (let i = 0; i < licenseKeys.length; i += batchSize) {
+    const batchKeys = licenseKeys.slice(i, i + batchSize)
 
-  if (logsError) {
-    console.error('Error fetching logs summary:', logsError)
-    return []
+    // Get all logs for this batch (using range to get all)
+    let allLogs: Array<{ license_key: string; status: string; message: string | null; created_at: string }> = []
+    let from = 0
+    const pageSize = 1000
+
+    while (true) {
+      const { data: pageLogs, error } = await supabase
+        .from('check_logs')
+        .select('license_key, status, message, created_at')
+        .in('license_key', batchKeys)
+        .order('created_at', { ascending: false })
+        .range(from, from + pageSize - 1)
+
+      if (error) {
+        console.error('Error fetching logs:', error)
+        break
+      }
+
+      if (!pageLogs || pageLogs.length === 0) break
+
+      allLogs = allLogs.concat(pageLogs)
+
+      if (pageLogs.length < pageSize) break // No more pages
+      from += pageSize
+    }
+
+    // Count logs for this batch
+    allLogs.forEach(log => {
+      const key = log.license_key
+      if (!key) return
+
+      const current = licenseLogsMap.get(key) || { total: 0, failed: 0, success: 0, ipChange: 0, lastAt: null }
+      current.total++
+
+      // Check if it's an IP change
+      if (isIpChangeLog(log)) {
+        current.ipChange++
+      } else if (log.status === 'valid' || log.status === 'success') {
+        current.success++
+      } else {
+        current.failed++
+      }
+
+      // Track most recent alert
+      if (!current.lastAt || new Date(log.created_at) > new Date(current.lastAt)) {
+        current.lastAt = log.created_at
+      }
+
+      licenseLogsMap.set(key, current)
+    })
   }
-
-  // Count logs
-  logsWithMessages?.forEach(log => {
-    const key = log.license_key
-    if (!key) return
-
-    const current = licenseLogsMap.get(key) || { total: 0, failed: 0, success: 0, ipChange: 0, lastAt: null }
-    current.total++
-
-    // Check if it's an IP change
-    if (isIpChangeLog(log)) {
-      current.ipChange++
-    } else if (log.status === 'valid' || log.status === 'success') {
-      current.success++
-    } else {
-      current.failed++
-    }
-
-    // Track most recent alert
-    if (!current.lastAt || new Date(log.created_at) > new Date(current.lastAt)) {
-      current.lastAt = log.created_at
-    }
-
-    licenseLogsMap.set(key, current)
-  })
 
   // Convert to array, only include licenses that have at least 1 log
   const result: LicenseAlertsSummary[] = []
