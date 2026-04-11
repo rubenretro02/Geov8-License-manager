@@ -22,7 +22,7 @@ import {
   FileText,
   ArrowLeftRight
 } from 'lucide-react'
-import { getAlertsByLicense, isIpChangeLog } from '@/lib/actions/alerts'
+import { getAlertsByLicense } from '@/lib/actions/alerts'
 
 interface LicenseAlertsSummary {
   license_key: string
