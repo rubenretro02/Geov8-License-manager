@@ -231,6 +231,14 @@ export const translations = {
     lastUpdate: 'Last update',
     unknown: 'unknown',
     downloadApp: 'Download App',
+    // User Filter
+    filterByUser: 'Filter by User',
+    usersWithLicenses: 'users with licenses',
+    searchUsers: 'Search users...',
+    allUsers: 'All Users',
+    noUsersFound: 'No users found',
+    clearFilter: 'Clear',
+    licensesBy: 'Licenses by',
   },
   es: {
     // Navigation
@@ -464,6 +472,14 @@ export const translations = {
     lastUpdate: 'Última actualización',
     unknown: 'desconocido',
     downloadApp: 'Descargar App',
+    // User Filter
+    filterByUser: 'Filtrar por Usuario',
+    usersWithLicenses: 'usuarios con licencias',
+    searchUsers: 'Buscar usuarios...',
+    allUsers: 'Todos los Usuarios',
+    noUsersFound: 'No se encontraron usuarios',
+    clearFilter: 'Limpiar',
+    licensesBy: 'Licencias de',
   },
 }
 
