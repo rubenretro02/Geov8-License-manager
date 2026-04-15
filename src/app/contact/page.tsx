@@ -120,18 +120,50 @@ export default function ContactPage() {
     <div className="min-h-screen bg-zinc-950">
       <Toaster position="top-right" theme="dark" richColors />
 
-      {/* Header */}
+      {/* Header with Navigation */}
       <header className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Shield className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">GeoV8</h1>
-              <p className="text-xs text-zinc-500">License Manager</p>
-            </div>
-          </Link>
+          <div className="flex items-center gap-6">
+            <Link href="/" className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                <Shield className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-white">GeoV8</h1>
+                <p className="text-xs text-zinc-500">License Manager</p>
+              </div>
+            </Link>
+
+            {/* Navigation Links */}
+            {isLoggedIn && (
+              <nav className="hidden md:flex items-center gap-1">
+                <Link href="/dashboard">
+                  <Button variant="ghost" className="text-zinc-400 hover:text-white hover:bg-zinc-800/50">
+                    Dashboard
+                  </Button>
+                </Link>
+                <Link href="/help">
+                  <Button variant="ghost" className="text-zinc-400 hover:text-white hover:bg-zinc-800/50">
+                    <BookOpen className="w-4 h-4 mr-2" />
+                    Help Center
+                  </Button>
+                </Link>
+                <Link href="/support">
+                  <Button variant="ghost" className="text-zinc-400 hover:text-white hover:bg-zinc-800/50">
+                    <Ticket className="w-4 h-4 mr-2" />
+                    Support
+                  </Button>
+                </Link>
+                <Link href="/contact">
+                  <Button variant="ghost" className="bg-zinc-800 text-white">
+                    <Mail className="w-4 h-4 mr-2" />
+                    Contact
+                  </Button>
+                </Link>
+              </nav>
+            )}
+          </div>
+
           <div className="flex items-center gap-3">
             <Link href="/help">
               <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800">
