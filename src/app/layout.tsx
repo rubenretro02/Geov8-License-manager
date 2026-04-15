@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   title: "License Manager - Admin Panel",
   description: "License management system",
   other: {
-    "cryptomus": "ef057a45",
+    "cryptomus": "f12ef5b7",
   },
 };
 
