@@ -32,6 +32,7 @@ import {
   ChevronDown,
   Receipt,
   HelpCircle,
+  Ticket,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -218,6 +219,20 @@ export function Header({ user, profile }: HeaderProps) {
                 </Button>
               </Link>
             )}
+            {/* Help Center Link */}
+            <Link href="/help">
+              <Button
+                variant="ghost"
+                className={`gap-2 ${
+                  pathname === '/help'
+                    ? 'bg-zinc-800 text-white'
+                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                }`}
+              >
+                <HelpCircle className="w-4 h-4" />
+                {lang === 'es' ? 'Ayuda' : 'Help'}
+              </Button>
+            </Link>
             {/* Support Link */}
             <Link href="/support">
               <Button
@@ -228,7 +243,7 @@ export function Header({ user, profile }: HeaderProps) {
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
                 }`}
               >
-                <HelpCircle className="w-4 h-4" />
+                <Ticket className="w-4 h-4" />
                 {lang === 'es' ? 'Soporte' : 'Support'}
               </Button>
             </Link>

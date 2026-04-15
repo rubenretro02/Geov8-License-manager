@@ -22,6 +22,8 @@ import {
   Crown,
   Infinity,
   LayoutDashboard,
+  MessageCircle,
+  Mail,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -400,12 +402,106 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Simple Footer */}
-      <footer className="border-t border-zinc-800 py-8">
+      {/* Footer */}
+      <footer className="border-t border-zinc-800 py-12">
         <div className="container mx-auto px-4">
-          <p className="text-center text-sm text-zinc-500">
-            © 2024 GeoV8. All rights reserved.
-          </p>
+          <div className="grid md:grid-cols-4 gap-8 mb-8">
+            {/* Brand */}
+            <div className="md:col-span-1">
+              <Link href="/" className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">GeoV8</h3>
+                  <p className="text-xs text-zinc-500">License Manager</p>
+                </div>
+              </Link>
+              <p className="text-zinc-500 text-sm">
+                Advanced license management with HWID binding and real-time protection.
+              </p>
+            </div>
+
+            {/* Quick Links */}
+            <div>
+              <h4 className="text-white font-semibold mb-4">Product</h4>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/store" className="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    Pricing
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/dashboard" className="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    Dashboard
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/register" className="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    Get Started
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Support */}
+            <div>
+              <h4 className="text-white font-semibold mb-4">Support</h4>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/help" className="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    Help Center
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/support" className="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    Support Tickets
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/contact" className="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    Contact Us
+                  </Link>
+                </li>
+                <li>
+                  <a href="https://t.me/geov8_support" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    Telegram
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            {/* Legal */}
+            <div>
+              <h4 className="text-white font-semibold mb-4">Legal</h4>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/terms" className="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    Terms of Service
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/privacy" className="text-zinc-400 hover:text-emerald-400 transition-colors">
+                    Privacy Policy
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="pt-8 border-t border-zinc-800 flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-zinc-500">
+              © 2024 GeoV8. All rights reserved.
+            </p>
+            <div className="flex items-center gap-4">
+              <a href="https://t.me/geov8_support" target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-white transition-colors">
+                <MessageCircle className="w-5 h-5" />
+              </a>
+              <a href="mailto:support@blackgoatt.com" className="text-zinc-500 hover:text-white transition-colors">
+                <Mail className="w-5 h-5" />
+              </a>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

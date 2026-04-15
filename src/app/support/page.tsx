@@ -446,6 +446,18 @@ export default function SupportPage() {
             </div>
           </div>
 
+          {/* Help Center Link */}
+          <div className="mt-12 p-6 bg-zinc-900/50 rounded-xl border border-zinc-800 text-center">
+            <h3 className="text-lg font-semibold text-white mb-2">Looking for quick answers?</h3>
+            <p className="text-zinc-400 mb-4">Visit our comprehensive Help Center with FAQs and guides.</p>
+            <Link href="/help">
+              <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800">
+                <HelpCircle className="w-4 h-4 mr-2" />
+                Visit Help Center
+              </Button>
+            </Link>
+          </div>
+
           {/* Footer Links */}
           <div className="mt-12 pt-8 border-t border-zinc-800 text-center">
             <div className="flex items-center justify-center gap-6 text-sm text-zinc-500">
@@ -459,6 +471,14 @@ export default function SupportPage() {
               <span>•</span>
               <Link href="/support" className="hover:text-white transition-colors text-emerald-400">
                 Support
+              </Link>
+              <span>•</span>
+              <Link href="/help" className="hover:text-white transition-colors">
+                Help Center
+              </Link>
+              <span>•</span>
+              <Link href="/contact" className="hover:text-white transition-colors">
+                Contact
               </Link>
             </div>
             <p className="mt-4 text-zinc-600 text-sm">
