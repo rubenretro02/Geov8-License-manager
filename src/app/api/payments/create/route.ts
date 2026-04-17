@@ -5,7 +5,7 @@ import crypto from 'crypto'
 const CRYPTOMUS_API_KEY = process.env.CRYPTOMUS_API_KEY || ''
 const CRYPTOMUS_MERCHANT_ID = process.env.CRYPTOMUS_MERCHANT_ID || ''
 const CRYPTOMUS_API_URL = 'https://api.cryptomus.com/v1'
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://geo.blackgott.com'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://geo.blackgoatt.com'
 
 // Generate Cryptomus signature
 function generateSign(data: object): string {
