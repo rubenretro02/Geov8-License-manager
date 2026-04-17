@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { UserPlus, Loader2, Shield, ArrowRight } from 'lucide-react'
+import { UserPlus, Loader2, Shield, Mail, ArrowLeft, RefreshCw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { Toaster } from 'sonner'
@@ -21,6 +21,12 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // OTP verification state
+  const [showOtpForm, setShowOtpForm] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [resending, setResending] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -60,7 +66,7 @@ export default function RegisterPage() {
         return
       }
 
-      // Create user
+      // Create user with email confirmation
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -83,9 +89,41 @@ export default function RegisterPage() {
       }
 
       if (data.user) {
-        // Create profile
-        // Self-registered users get their own UUID as admin_id to allow creating licenses
-        // They also get 1 trial per month (max 1 day)
+        // Show OTP form
+        toast.success('Verification code sent to your email!')
+        setShowOtpForm(true)
+      }
+    } catch (err) {
+      console.error('Registration error:', err)
+      setError('An error occurred. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setVerifying(true)
+
+    try {
+      const supabase = createClient()
+
+      // Verify OTP
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token: otpCode,
+        type: 'signup',
+      })
+
+      if (verifyError) {
+        setError(verifyError.message || 'Invalid verification code')
+        setVerifying(false)
+        return
+      }
+
+      if (data.user) {
+        // Create profile after successful verification
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
@@ -94,10 +132,10 @@ export default function RegisterPage() {
             username: username.toLowerCase(),
             full_name: fullName,
             role: 'user',
-            admin_id: data.user.id, // Self-managed - use own UUID as admin_id
+            admin_id: data.user.id,
             credits: 0,
-            credit_price: 0, // Users don't have credit pricing
-            trial_limit: 1, // 1 trial per month for self-registered users
+            credit_price: 0,
+            trial_limit: 1,
             trials_used_this_month: 0,
             subscription_id: null,
             subscription_status: null,
@@ -112,21 +150,134 @@ export default function RegisterPage() {
           console.error('Profile creation error:', profileError)
         }
 
-        toast.success('Account created successfully!')
+        toast.success('Email verified! Redirecting to dashboard...')
 
-        // Redirect to dashboard
         setTimeout(() => {
           router.push('/dashboard')
-        }, 1000)
+        }, 1500)
       }
     } catch (err) {
-      console.error('Registration error:', err)
+      console.error('Verification error:', err)
       setError('An error occurred. Please try again.')
     } finally {
-      setLoading(false)
+      setVerifying(false)
     }
   }
 
+  const handleResendCode = async () => {
+    setResending(true)
+    setError('')
+
+    try {
+      const supabase = createClient()
+
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+      })
+
+      if (resendError) {
+        setError(resendError.message)
+      } else {
+        toast.success('New verification code sent!')
+      }
+    } catch (err) {
+      setError('Failed to resend code')
+    } finally {
+      setResending(false)
+    }
+  }
+
+  // OTP Verification Form
+  if (showOtpForm) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex items-center justify-center p-4">
+        <Toaster position="top-right" theme="dark" richColors />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/20 via-transparent to-transparent" />
+
+        <Card className="w-full max-w-md relative bg-zinc-900/80 backdrop-blur-xl border-zinc-800 shadow-2xl">
+          <CardHeader className="text-center space-y-4 pb-2">
+            <div className="mx-auto w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+              <Mail className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <CardTitle className="text-2xl font-bold text-white">Verify Your Email</CardTitle>
+              <CardDescription className="text-zinc-400 mt-1">
+                Enter the 6-digit code sent to<br />
+                <span className="text-emerald-400 font-medium">{email}</span>
+              </CardDescription>
+            </div>
+          </CardHeader>
+
+          <CardContent className="pt-6">
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="otp" className="text-zinc-300">Verification Code</Label>
+                <Input
+                  id="otp"
+                  type="text"
+                  placeholder="123456"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  required
+                  maxLength={6}
+                  className="bg-zinc-800/50 border-zinc-700 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20 h-14 text-center text-2xl tracking-[0.5em] font-mono"
+                />
+              </div>
+
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                  <p className="text-red-400 text-sm text-center">{error}</p>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={verifying || otpCode.length !== 6}
+                className="w-full h-11 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold shadow-lg shadow-emerald-500/20 transition-all duration-200"
+              >
+                {verifying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  'Verify Email'
+                )}
+              </Button>
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOtpForm(false)}
+                  className="text-sm text-zinc-500 hover:text-zinc-300 flex items-center gap-1"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={resending}
+                  className="text-sm text-emerald-400 hover:text-emerald-300 flex items-center gap-1 disabled:opacity-50"
+                >
+                  {resending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4" />
+                  )}
+                  Resend Code
+                </button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Registration Form
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex items-center justify-center p-4">
       <Toaster position="top-right" theme="dark" richColors />
@@ -192,7 +343,7 @@ export default function RegisterPage() {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="********"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -205,7 +356,7 @@ export default function RegisterPage() {
               <Input
                 id="confirmPassword"
                 type="password"
-                placeholder="••••••••"
+                placeholder="********"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
