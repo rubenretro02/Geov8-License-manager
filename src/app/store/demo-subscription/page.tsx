@@ -89,7 +89,7 @@ function DemoSubscriptionContent() {
         </div>
         <CardTitle className="text-2xl text-white">Demo Payment Mode</CardTitle>
         <p className="text-zinc-400 text-sm mt-2">
-          NOWPayments API key is not configured. This is a demo credit purchase simulation.
+          Cryptomus API key is not configured. This is a demo credit purchase simulation.
         </p>
       </CardHeader>
 

@@ -351,7 +351,7 @@ function StoreContent() {
           </div>
 
           <p className="text-center text-sm text-zinc-500">
-            Secure payment via cryptocurrency (NOWPayments)
+            Secure payment via cryptocurrency (Cryptomus)
           </p>
         </main>
       </>

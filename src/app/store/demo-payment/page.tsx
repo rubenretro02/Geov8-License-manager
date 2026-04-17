@@ -100,7 +100,7 @@ function DemoPaymentContent() {
         </div>
         <CardTitle className="text-2xl text-white">Demo Payment Mode</CardTitle>
         <p className="text-zinc-400 text-sm mt-2">
-          NOWPayments API key is not configured. This is a demo payment simulation.
+          Cryptomus API key is not configured. This is a demo payment simulation.
         </p>
       </CardHeader>
 
@@ -135,7 +135,7 @@ function DemoPaymentContent() {
           <div className="flex items-center gap-3 pt-3 border-t border-zinc-700">
             <Bitcoin className="w-5 h-5 text-amber-400" />
             <p className="text-sm text-zinc-400">
-              In production, you would be redirected to NOWPayments to complete the cryptocurrency payment.
+              In production, you would be redirected to Cryptomus to complete the cryptocurrency payment.
             </p>
           </div>
         </div>

@@ -105,11 +105,11 @@ const FAQ_CATEGORIES = [
     questions: [
       {
         question: 'How do I purchase credits?',
-        answer: 'Go to the Store page and select a credit package. We accept cryptocurrency payments through NOWPayments. After payment confirmation, credits are automatically added to your account.'
+        answer: 'Go to the Store page and select a credit package. We accept cryptocurrency payments through Cryptomus. After payment confirmation, credits are automatically added to your account.'
       },
       {
         question: 'What payment methods are accepted?',
-        answer: 'We accept cryptocurrency payments including Bitcoin (BTC), Ethereum (ETH), Litecoin (LTC), USDT, and many other cryptocurrencies through our payment processor NOWPayments.'
+        answer: 'We accept cryptocurrency payments including Bitcoin (BTC), Ethereum (ETH), Litecoin (LTC), USDT, and many other cryptocurrencies through our payment processor Cryptomus.'
       },
       {
         question: 'How long does payment confirmation take?',
@@ -169,7 +169,7 @@ const FAQ_CATEGORIES = [
       },
       {
         question: 'Is my payment information secure?',
-        answer: 'Absolutely. We use NOWPayments, a reputable cryptocurrency payment processor. We never store your wallet addresses or transaction details beyond what\'s necessary for order tracking.'
+        answer: 'Absolutely. We use Cryptomus, a reputable cryptocurrency payment processor. We never store your wallet addresses or transaction details beyond what\'s necessary for order tracking.'
       },
       {
         question: 'How do you protect against license leaks?',

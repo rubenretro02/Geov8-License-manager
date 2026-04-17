@@ -488,7 +488,7 @@ export default function ContactPage() {
                 <CardContent className="p-5">
                   <h4 className="text-white font-medium mb-2">What payment methods do you accept?</h4>
                   <p className="text-zinc-400 text-sm">
-                    We accept cryptocurrency payments including BTC, ETH, LTC, and USDT via NOWPayments.
+                    We accept cryptocurrency payments including BTC, ETH, LTC, and USDT via Cryptomus.
                   </p>
                 </CardContent>
               </Card>

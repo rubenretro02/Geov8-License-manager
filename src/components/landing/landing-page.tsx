@@ -365,7 +365,7 @@ export function LandingPage() {
           </div>
 
           <p className="text-center text-sm text-zinc-500 mt-8">
-            Secure payment via cryptocurrency (NOWPayments)
+            Secure payment via cryptocurrency (Cryptomus)
           </p>
         </div>
       </section>
@@ -391,7 +391,7 @@ export function LandingPage() {
             <StepCard
               number="2"
               title="Purchase License"
-              description="Pay securely with cryptocurrency via NOWPayments"
+              description="Pay securely with cryptocurrency via Cryptomus"
             />
             <StepCard
               number="3"

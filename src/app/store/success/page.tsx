@@ -12,7 +12,8 @@ function SuccessContent() {
   const orderId = searchParams.get('order')
   const paymentType = searchParams.get('type') || 'license'
   const creditsParam = searchParams.get('credits')
-  const npPaymentId = searchParams.get('NP_id') // NOWPayments payment_id from redirect
+  // Cryptomus redirects with payment info in URL
+  const paymentId = searchParams.get('payment_id') || searchParams.get('uuid')
 
   const creditsAdded = creditsParam ? parseInt(creditsParam) : 0
   const isCredits = paymentType === 'credits'
@@ -23,8 +24,8 @@ function SuccessContent() {
 
   useEffect(() => {
     async function verifyPayment() {
-      if (!npPaymentId) {
-        // No payment ID from NOWPayments, try to verify anyway
+      if (!paymentId) {
+        // No payment ID from Cryptomus, try to verify anyway
         try {
           const res = await fetch('/api/payments/verify', { method: 'GET' })
           const data = await res.json()
@@ -44,13 +45,13 @@ function SuccessContent() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            nowpaymentsOrderId: orderId,
-            paymentId: npPaymentId
+            cryptomusOrderId: orderId,
+            paymentId: paymentId
           }),
         })
 
         if (saveRes.ok) {
-          console.log('Payment ID saved:', npPaymentId)
+          console.log('Payment ID saved:', paymentId)
         }
 
         // Then verify all pending payments
@@ -72,7 +73,7 @@ function SuccessContent() {
     }
 
     verifyPayment()
-  }, [npPaymentId, orderId])
+  }, [paymentId, orderId])
 
   if (verifying) {
     return (

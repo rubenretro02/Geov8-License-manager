@@ -117,7 +117,7 @@ export default function OrdersPage() {
     }
   }, [router])
 
-  // Auto-verify payments with NOWPayments
+  // Auto-verify payments with Cryptomus
   const autoVerifyPayments = useCallback(async () => {
     setAutoVerifying(true)
     try {
@@ -190,7 +190,7 @@ export default function OrdersPage() {
     return STATUS_CONFIG[status] || STATUS_CONFIG.pending
   }
 
-  // Only super_admin can manually confirm orders without NOWPayments verification
+  // Only super_admin can manually confirm orders without Cryptomus verification
   const canManuallyConfirmOrder = (order: Order) => {
     if (profile?.role !== 'super_admin') return false
     const confirmableStatuses = ['pending', 'waiting', 'confirming', 'confirmed', 'sending', 'partially_paid']
@@ -257,7 +257,7 @@ export default function OrdersPage() {
                 <div>
                   <p className="text-emerald-400 font-medium">Verificando pagos automáticamente...</p>
                   <p className="text-emerald-400/70 text-sm">
-                    Consultando NOWPayments para confirmar pagos pendientes.
+                    Consultando Cryptomus para confirmar pagos pendientes.
                   </p>
                 </div>
               </CardContent>
@@ -289,7 +289,7 @@ export default function OrdersPage() {
                 <div>
                   <p className="text-blue-400 font-medium">¿El pago se completó pero no se verificó?</p>
                   <p className="text-blue-400/70 text-sm">
-                    Los pagos se verifican automáticamente con NOWPayments. Haz clic en &quot;Refresh &amp; Verify&quot; para verificar el estado actual.
+                    Los pagos se verifican automáticamente con Cryptomus. Haz clic en &quot;Refresh &amp; Verify&quot; para verificar el estado actual.
                   </p>
                 </div>
               </CardContent>
@@ -383,7 +383,7 @@ export default function OrdersPage() {
                                     onClick={() => confirmPayment(order.id)}
                                     disabled={confirmingOrderId === order.id || autoVerifying}
                                     className="bg-red-600 hover:bg-red-500 text-white"
-                                    title="Admin: Confirm without NOWPayments verification"
+                                    title="Admin: Confirm without Cryptomus verification"
                                   >
                                     {confirmingOrderId === order.id ? (
                                       <Loader2 className="w-3 h-3 mr-1 animate-spin" />
