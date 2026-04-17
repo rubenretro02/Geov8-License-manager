@@ -216,12 +216,12 @@ export default function RegisterPage() {
                 <Input
                   id="otp"
                   type="text"
-                  placeholder="123456"
+                  placeholder="Enter code"
                   value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
                   required
-                  maxLength={6}
-                  className="bg-zinc-800/50 border-zinc-700 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20 h-14 text-center text-2xl tracking-[0.5em] font-mono"
+                  maxLength={8}
+                  className="bg-zinc-800/50 border-zinc-700 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20 h-14 text-center text-2xl tracking-[0.3em] font-mono"
                 />
               </div>
 
@@ -233,7 +233,7 @@ export default function RegisterPage() {
 
               <Button
                 type="submit"
-                disabled={verifying || otpCode.length !== 6}
+                disabled={verifying || otpCode.length < 6}
                 className="w-full h-11 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold shadow-lg shadow-emerald-500/20 transition-all duration-200"
               >
                 {verifying ? (
