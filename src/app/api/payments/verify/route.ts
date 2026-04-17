@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 
-const NOWPAYMENTS_API_KEY = process.env.NOWPAYMENTS_API_KEY || ''
-const NOWPAYMENTS_API_URL = 'https://api.nowpayments.io/v1'
+const CRYPTOMUS_API_KEY = process.env.CRYPTOMUS_API_KEY || ''
+const CRYPTOMUS_MERCHANT_ID = process.env.CRYPTOMUS_MERCHANT_ID || ''
+const CRYPTOMUS_API_URL = 'https://api.cryptomus.com/v1'
+
+// Generate Cryptomus signature
+function generateSign(data: object): string {
+  const jsonData = JSON.stringify(data)
+  const base64Data = Buffer.from(jsonData).toString('base64')
+  return crypto.createHash('md5').update(base64Data + CRYPTOMUS_API_KEY).digest('hex')
+}
 
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -16,70 +25,68 @@ function getSupabaseAdmin() {
   return createAdminClient(supabaseUrl, supabaseServiceKey)
 }
 
-// Check payment status using the invoice_id (payment_id in our database)
-async function checkPaymentStatus(invoiceId: string): Promise<{
+// Check payment status using Cryptomus API
+async function checkPaymentStatus(uuid: string, orderId?: string): Promise<{
   status: string
   paid: boolean
   processing: boolean
-  payment_id?: string
-  actuallyPaid?: number
-  payAmount?: number
+  uuid?: string
+  actuallyPaid?: string
+  payerCurrency?: string
 } | null> {
-  if (!NOWPAYMENTS_API_KEY || !invoiceId) {
-    console.log('No API key or invoice_id - cannot verify')
+  if (!CRYPTOMUS_API_KEY || !CRYPTOMUS_MERCHANT_ID) {
+    console.log('No API key or merchant_id - cannot verify')
     return null
   }
 
   try {
-    console.log(`Checking payment status for invoice_id: ${invoiceId}`)
+    console.log(`Checking payment status for uuid: ${uuid}, order_id: ${orderId}`)
 
-    // Try the invoice endpoint first
-    const invoiceResponse = await fetch(`${NOWPAYMENTS_API_URL}/invoice/${invoiceId}`, {
-      headers: { 'x-api-key': NOWPAYMENTS_API_KEY },
+    // Cryptomus payment info endpoint
+    const requestData: Record<string, string> = {}
+    if (uuid) {
+      requestData.uuid = uuid
+    }
+    if (orderId) {
+      requestData.order_id = orderId
+    }
+
+    const sign = generateSign(requestData)
+
+    const response = await fetch(`${CRYPTOMUS_API_URL}/payment/info`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'merchant': CRYPTOMUS_MERCHANT_ID,
+        'sign': sign,
+      },
+      body: JSON.stringify(requestData),
     })
 
-    if (invoiceResponse.ok) {
-      const data = await invoiceResponse.json()
-      console.log('Invoice response:', JSON.stringify(data, null, 2))
+    if (response.ok) {
+      const data = await response.json()
+      console.log('Cryptomus payment info response:', JSON.stringify(data, null, 2))
 
-      const finishedStatuses = ['finished', 'confirmed', 'sending']
-      const processingStatuses = ['confirming', 'sending', 'partially_paid']
-      const status = data.payment_status || data.status || 'unknown'
+      if (data.state === 0 && data.result) {
+        const result = data.result
+        const status = result.status || 'unknown'
 
-      return {
-        status: status,
-        paid: finishedStatuses.includes(status),
-        processing: processingStatuses.includes(status),
-        payment_id: data.payment_id?.toString(),
-        actuallyPaid: data.actually_paid,
-        payAmount: data.pay_amount,
+        // Paid statuses in Cryptomus
+        const paidStatuses = ['paid', 'paid_over']
+        const processingStatuses = ['process', 'check', 'confirm_check']
+
+        return {
+          status: status,
+          paid: paidStatuses.includes(status),
+          processing: processingStatuses.includes(status),
+          uuid: result.uuid,
+          actuallyPaid: result.payment_amount,
+          payerCurrency: result.payer_currency,
+        }
       }
     }
 
-    // If invoice endpoint fails, try with payment_id directly (for manual verification)
-    const paymentResponse = await fetch(`${NOWPAYMENTS_API_URL}/payment/${invoiceId}`, {
-      headers: { 'x-api-key': NOWPAYMENTS_API_KEY },
-    })
-
-    if (paymentResponse.ok) {
-      const data = await paymentResponse.json()
-      console.log('Payment response:', JSON.stringify(data, null, 2))
-
-      const finishedStatuses = ['finished', 'confirmed', 'sending']
-      const processingStatuses = ['confirming', 'sending', 'partially_paid']
-      const status = data.payment_status || 'unknown'
-
-      return {
-        status: status,
-        paid: finishedStatuses.includes(status),
-        processing: processingStatuses.includes(status),
-        payment_id: data.payment_id?.toString(),
-        actuallyPaid: data.actually_paid,
-        payAmount: data.pay_amount,
-      }
-    }
-
-    console.log('Both invoice and payment endpoints failed')
+    console.log('Cryptomus payment info request failed')
     return null
   } catch (error) {
     console.error('Error checking payment status:', error)
@@ -138,7 +145,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { orderId, paymentId: manualPaymentId } = body
+    const { orderId } = body
 
     const adminSupabase = getSupabaseAdmin()
 
@@ -163,18 +170,19 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Use manual payment_id if provided, otherwise use the stored payment_id (invoice_id)
-    const idToCheck = manualPaymentId || order.payment_id
+    // Use stored payment_id (Cryptomus uuid) or cryptomus_order_id
+    const uuidToCheck = order.payment_id
+    const orderIdToCheck = order.cryptomus_order_id
 
-    if (!idToCheck) {
+    if (!uuidToCheck && !orderIdToCheck) {
       return NextResponse.json({
         success: false,
         message: 'No payment ID available to verify'
       })
     }
 
-    // Check payment status
-    const paymentStatus = await checkPaymentStatus(idToCheck)
+    // Check payment status with Cryptomus
+    const paymentStatus = await checkPaymentStatus(uuidToCheck, orderIdToCheck)
 
     if (paymentStatus && paymentStatus.paid) {
       // Payment confirmed! Update order and add credits
@@ -216,17 +224,27 @@ export async function POST(request: NextRequest) {
         .eq('id', order.id)
     }
 
-    // Return current status from NOWPayments
+    // Map Cryptomus status to user-friendly message
+    const statusMessages: Record<string, string> = {
+      'process': 'Payment is being processed',
+      'check': 'Payment is being verified',
+      'confirm_check': 'Payment is being confirmed',
+      'paid': 'Payment completed',
+      'paid_over': 'Payment completed (overpaid)',
+      'fail': 'Payment failed',
+      'wrong_amount': 'Wrong amount received',
+      'cancel': 'Payment cancelled',
+    }
+
+    // Return current status from Cryptomus
     return NextResponse.json({
       success: true,
       autoConfirmed: false,
-      nowpaymentsStatus: paymentStatus?.status || 'unknown',
+      cryptomusStatus: paymentStatus?.status || 'unknown',
       processing: paymentStatus?.processing || false,
-      message: paymentStatus?.status === 'waiting' || paymentStatus?.status === 'pending'
-        ? 'Payment not yet received'
-        : paymentStatus?.processing
-          ? `Payment is being processed (${paymentStatus.status})`
-          : `Payment status: ${paymentStatus?.status || 'unknown'}`,
+      message: paymentStatus?.status
+        ? statusMessages[paymentStatus.status] || `Payment status: ${paymentStatus.status}`
+        : 'Unable to check payment status',
     })
   } catch (error) {
     console.error('Verify payment error:', error)
@@ -251,7 +269,7 @@ export async function GET(request: NextRequest) {
       .from('orders')
       .select('*')
       .eq('user_id', user.id)
-      .in('status', ['pending', 'waiting', 'confirming', 'confirmed', 'sending'])
+      .in('status', ['pending', 'waiting', 'process', 'check', 'confirm_check', 'confirming'])
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -266,21 +284,24 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Check each pending order with NOWPayments
+    // Check each pending order with Cryptomus
     let verifiedCount = 0
     let creditsAdded = 0
     let statusUpdated = 0
     const results: Array<{ orderId: string; status: string; verified: boolean; updated?: boolean }> = []
 
     for (const order of pendingOrders) {
-      // Use the stored payment_id (invoice_id) to check status
-      if (!order.payment_id) {
+      // Use the stored payment_id (Cryptomus uuid) or cryptomus_order_id
+      const uuidToCheck = order.payment_id
+      const orderIdToCheck = order.cryptomus_order_id
+
+      if (!uuidToCheck && !orderIdToCheck) {
         results.push({ orderId: order.id, status: order.status, verified: false })
         continue
       }
 
-      const paymentStatus = await checkPaymentStatus(order.payment_id)
-      console.log(`Order ${order.id} - NOWPayments status: ${paymentStatus?.status}, paid: ${paymentStatus?.paid}, processing: ${paymentStatus?.processing}`)
+      const paymentStatus = await checkPaymentStatus(uuidToCheck, orderIdToCheck)
+      console.log(`Order ${order.id} - Cryptomus status: ${paymentStatus?.status}, paid: ${paymentStatus?.paid}, processing: ${paymentStatus?.processing}`)
 
       if (paymentStatus && paymentStatus.paid) {
         // Payment finished - Update order and add credits
@@ -307,15 +328,15 @@ export async function GET(request: NextRequest) {
           console.log(`Auto-verified order ${order.id}. Added ${order.credits} credits.`)
         }
       } else if (paymentStatus && paymentStatus.processing) {
-        // Update local status to match NOWPayments status
-        const nowPaymentsStatus = paymentStatus.status
+        // Update local status to match Cryptomus status
+        const cryptomusStatus = paymentStatus.status
 
-        if (order.status !== nowPaymentsStatus) {
-          console.log(`Updating order ${order.id} status from ${order.status} to ${nowPaymentsStatus}`)
+        if (order.status !== cryptomusStatus) {
+          console.log(`Updating order ${order.id} status from ${order.status} to ${cryptomusStatus}`)
           await adminSupabase
             .from('orders')
             .update({
-              status: nowPaymentsStatus,
+              status: cryptomusStatus,
               updated_at: new Date().toISOString()
             })
             .eq('id', order.id)
@@ -324,9 +345,9 @@ export async function GET(request: NextRequest) {
 
         results.push({
           orderId: order.id,
-          status: nowPaymentsStatus,
+          status: cryptomusStatus,
           verified: false,
-          updated: order.status !== nowPaymentsStatus
+          updated: order.status !== cryptomusStatus
         })
       } else {
         results.push({

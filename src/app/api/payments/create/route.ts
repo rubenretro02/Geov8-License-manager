@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import crypto from 'crypto'
 
-const NOWPAYMENTS_API_KEY = process.env.NOWPAYMENTS_API_KEY || ''
-const NOWPAYMENTS_API_URL = 'https://api.nowpayments.io/v1'
+const CRYPTOMUS_API_KEY = process.env.CRYPTOMUS_API_KEY || ''
+const CRYPTOMUS_MERCHANT_ID = process.env.CRYPTOMUS_MERCHANT_ID || ''
+const CRYPTOMUS_API_URL = 'https://api.cryptomus.com/v1'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://geo.blackgott.com'
+
+// Generate Cryptomus signature
+function generateSign(data: object): string {
+  const jsonData = JSON.stringify(data)
+  const base64Data = Buffer.from(jsonData).toString('base64')
+  return crypto.createHash('md5').update(base64Data + CRYPTOMUS_API_KEY).digest('hex')
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,24 +64,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate order ID with appropriate prefix
+    // Cryptomus requires alphanumeric, underscores, and dashes only (no special chars)
+    const timestamp = Date.now()
     const orderId = isCredits
-      ? `credits_${user.id}_${creditAmount}_${Date.now()}`
-      : `order_${user.id}_${planId}_${Date.now()}`
+      ? `credits_${user.id.replace(/-/g, '')}_${creditAmount}_${timestamp}`
+      : `order_${user.id.replace(/-/g, '')}_${planId}_${timestamp}`
 
-    // Create payment data
-    const paymentData = {
-      price_amount: amount,
-      price_currency: 'usd',
-      order_id: orderId,
-      order_description: isCredits
-        ? `GeoV8 ${creditAmount} Credits for ${customerName || email}`
-        : `GeoV8 ${planName} for ${customerName || email}`,
-      ipn_callback_url: `${APP_URL}/api/payments/webhook`,
-      success_url: `${APP_URL}/store/success?order=${orderId}&type=${isCredits ? 'credits' : 'license'}${isCredits ? `&credits=${creditAmount}` : ''}`,
-      cancel_url: `${APP_URL}/store`,
-    }
-
-    // Save order to database first - include the exact order_id we send to NOWPayments
+    // Save order to database first
     const orderData = {
       user_id: user.id,
       email: email || user.email,
@@ -85,7 +83,7 @@ export async function POST(request: NextRequest) {
       status: 'pending',
       payment_id: null,
       payment_url: null,
-      nowpayments_order_id: orderId, // Save the exact order_id sent to NOWPayments
+      cryptomus_order_id: orderId, // Save the exact order_id sent to Cryptomus
     }
 
     const { data: orderRecord, error: orderError } = await supabase
@@ -100,7 +98,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if API key is configured
-    if (!NOWPAYMENTS_API_KEY) {
+    if (!CRYPTOMUS_API_KEY || !CRYPTOMUS_MERCHANT_ID) {
       // Demo mode - update order with demo URL
       const demoUrl = isCredits
         ? `/store/demo-payment?order=${orderId}&credits=${creditAmount}`
@@ -118,25 +116,45 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: 'NOWPayments API key not configured. Demo mode.',
+        message: 'Cryptomus API not configured. Demo mode.',
         orderId,
         paymentUrl: demoUrl,
       })
     }
 
-    const response = await fetch(`${NOWPAYMENTS_API_URL}/invoice`, {
+    // Create Cryptomus payment data
+    const paymentData = {
+      amount: amount.toString(),
+      currency: 'USD',
+      order_id: orderId,
+      url_return: `${APP_URL}/store`,
+      url_success: `${APP_URL}/store/success?order=${orderId}&type=${isCredits ? 'credits' : 'license'}${isCredits ? `&credits=${creditAmount}` : ''}`,
+      url_callback: `${APP_URL}/api/payments/webhook`,
+      is_payment_multiple: false,
+      lifetime: 3600, // 1 hour
+      additional_data: JSON.stringify({
+        customerName: customerName || email,
+        planName: isCredits ? `${creditAmount} Credits` : planName,
+        type: isCredits ? 'credits' : 'license',
+      }),
+    }
+
+    const sign = generateSign(paymentData)
+
+    const response = await fetch(`${CRYPTOMUS_API_URL}/payment`, {
       method: 'POST',
       headers: {
-        'x-api-key': NOWPAYMENTS_API_KEY,
         'Content-Type': 'application/json',
+        'merchant': CRYPTOMUS_MERCHANT_ID,
+        'sign': sign,
       },
       body: JSON.stringify(paymentData),
     })
 
     const paymentResponse = await response.json()
 
-    if (!response.ok) {
-      console.error('NOWPayments error:', paymentResponse)
+    if (!response.ok || paymentResponse.state !== 0) {
+      console.error('Cryptomus error:', paymentResponse)
 
       // Update order with failed status
       if (orderRecord) {
@@ -146,16 +164,20 @@ export async function POST(request: NextRequest) {
           .eq('id', orderRecord.id)
       }
 
-      return NextResponse.json({ error: 'Failed to create payment' }, { status: 500 })
+      return NextResponse.json({
+        error: paymentResponse.message || 'Failed to create payment'
+      }, { status: 500 })
     }
+
+    const result = paymentResponse.result
 
     // Update order with payment info
     if (orderRecord) {
       await supabase
         .from('orders')
         .update({
-          payment_id: paymentResponse.id,
-          payment_url: paymentResponse.invoice_url,
+          payment_id: result.uuid,
+          payment_url: result.url,
           status: 'waiting',
         })
         .eq('id', orderRecord.id)
@@ -164,8 +186,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       orderId,
-      paymentId: paymentResponse.id,
-      paymentUrl: paymentResponse.invoice_url,
+      paymentId: result.uuid,
+      paymentUrl: result.url,
     })
   } catch (error) {
     console.error('Payment creation error:', error)

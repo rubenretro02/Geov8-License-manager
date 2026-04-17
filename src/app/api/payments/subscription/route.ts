@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import crypto from 'crypto'
 
-const NOWPAYMENTS_API_KEY = process.env.NOWPAYMENTS_API_KEY || ''
-const NOWPAYMENTS_API_URL = 'https://api.nowpayments.io/v1'
+const CRYPTOMUS_API_KEY = process.env.CRYPTOMUS_API_KEY || ''
+const CRYPTOMUS_MERCHANT_ID = process.env.CRYPTOMUS_MERCHANT_ID || ''
+const CRYPTOMUS_API_URL = 'https://api.cryptomus.com/v1'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://geo.blackgott.com'
+
+// Generate Cryptomus signature
+function generateSign(data: object): string {
+  const jsonData = JSON.stringify(data)
+  const base64Data = Buffer.from(jsonData).toString('base64')
+  return crypto.createHash('md5').update(base64Data + CRYPTOMUS_API_KEY).digest('hex')
+}
 
 // Subscription plans for admins (credits)
 // 1 credit = 1 day of license
@@ -66,15 +75,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
     }
 
-    // Generate subscription order ID
-    const orderId = `sub_${user.id}_${planId}_${Date.now()}`
+    // Generate subscription order ID (without hyphens in userId for Cryptomus)
+    const orderId = `sub_${user.id.replace(/-/g, '')}_${planId}_${Date.now()}`
 
     // Check if API key is configured
-    if (!NOWPAYMENTS_API_KEY) {
+    if (!CRYPTOMUS_API_KEY || !CRYPTOMUS_MERCHANT_ID) {
       // Demo mode
       return NextResponse.json({
         success: true,
-        message: 'NOWPayments API key not configured. Demo mode.',
+        message: 'Cryptomus API not configured. Demo mode.',
         orderId,
         planId,
         credits: plan.credits,
@@ -82,73 +91,87 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Create recurring payment plan in NOWPayments
-    const subscriptionData = {
-      subscription_plan_id: `geov8_${planId}`, // Your plan ID in NOWPayments
-      pay_currency: 'usd',
+    // Create recurring payment with Cryptomus
+    const recurringData = {
+      amount: plan.price.toString(),
+      currency: 'USD',
+      name: `GeoV8 ${plan.name} Plan`,
+      period: 'monthly',
       order_id: orderId,
-      customer_email: profile.email,
-      ipn_callback_url: `${APP_URL}/api/payments/webhook`,
-      success_url: `${APP_URL}/store/success?order=${orderId}&type=subscription`,
-      cancel_url: `${APP_URL}/store?tab=credits`,
+      url_callback: `${APP_URL}/api/payments/webhook`,
+      url_return: `${APP_URL}/store`,
+      url_success: `${APP_URL}/store/success?order=${orderId}&type=subscription`,
     }
 
-    // Note: NOWPayments subscriptions work differently
-    // You need to set up recurring payment plans in their dashboard first
-    // Then use the /v1/subscriptions endpoint
-    const response = await fetch(`${NOWPAYMENTS_API_URL}/subscriptions`, {
+    const sign = generateSign(recurringData)
+
+    const response = await fetch(`${CRYPTOMUS_API_URL}/recurrence/create`, {
       method: 'POST',
       headers: {
-        'x-api-key': NOWPAYMENTS_API_KEY,
         'Content-Type': 'application/json',
+        'merchant': CRYPTOMUS_MERCHANT_ID,
+        'sign': sign,
       },
-      body: JSON.stringify(subscriptionData),
+      body: JSON.stringify(recurringData),
     })
 
     const subResponse = await response.json()
 
-    if (!response.ok) {
-      console.error('NOWPayments subscription error:', subResponse)
-      // Fall back to invoice if subscriptions not available
+    if (!response.ok || subResponse.state !== 0) {
+      console.error('Cryptomus subscription error:', subResponse)
+
+      // Fall back to single invoice if subscriptions not available
       const invoiceData = {
-        price_amount: plan.price,
-        price_currency: 'usd',
+        amount: plan.price.toString(),
+        currency: 'USD',
         order_id: orderId,
-        order_description: `GeoV8 ${plan.name} Plan - ${plan.credits} Credits/Month`,
-        ipn_callback_url: `${APP_URL}/api/payments/webhook`,
-        success_url: `${APP_URL}/store/success?order=${orderId}&type=credits`,
-        cancel_url: `${APP_URL}/store?tab=credits`,
+        url_callback: `${APP_URL}/api/payments/webhook`,
+        url_return: `${APP_URL}/store`,
+        url_success: `${APP_URL}/store/success?order=${orderId}&type=credits`,
+        lifetime: 3600,
+        additional_data: JSON.stringify({
+          planName: `${plan.name} Plan`,
+          credits: plan.credits,
+          type: 'subscription_fallback',
+        }),
       }
 
-      const invoiceResponse = await fetch(`${NOWPAYMENTS_API_URL}/invoice`, {
+      const invoiceSign = generateSign(invoiceData)
+
+      const invoiceResponse = await fetch(`${CRYPTOMUS_API_URL}/payment`, {
         method: 'POST',
         headers: {
-          'x-api-key': NOWPAYMENTS_API_KEY,
           'Content-Type': 'application/json',
+          'merchant': CRYPTOMUS_MERCHANT_ID,
+          'sign': invoiceSign,
         },
         body: JSON.stringify(invoiceData),
       })
 
       const invoiceResult = await invoiceResponse.json()
 
-      if (!invoiceResponse.ok) {
-        return NextResponse.json({ error: 'Failed to create payment' }, { status: 500 })
+      if (!invoiceResponse.ok || invoiceResult.state !== 0) {
+        return NextResponse.json({
+          error: invoiceResult.message || 'Failed to create payment'
+        }, { status: 500 })
       }
 
       return NextResponse.json({
         success: true,
         orderId,
-        paymentId: invoiceResult.id,
-        paymentUrl: invoiceResult.invoice_url,
+        paymentId: invoiceResult.result.uuid,
+        paymentUrl: invoiceResult.result.url,
         type: 'invoice', // Single payment, not recurring
       })
     }
+
+    const result = subResponse.result
 
     // Save subscription info to profile
     await supabase
       .from('profiles')
       .update({
-        subscription_id: subResponse.id,
+        subscription_id: result.uuid,
         subscription_status: 'active',
       })
       .eq('id', user.id)
@@ -156,8 +179,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       orderId,
-      subscriptionId: subResponse.id,
-      paymentUrl: subResponse.payment_link || subResponse.invoice_url,
+      subscriptionId: result.uuid,
+      paymentUrl: result.url,
       type: 'subscription',
     })
   } catch (error) {

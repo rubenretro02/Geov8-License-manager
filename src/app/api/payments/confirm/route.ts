@@ -13,6 +13,14 @@ function getSupabaseAdmin() {
   return createAdminClient(supabaseUrl, supabaseServiceKey)
 }
 
+// Convert userId back to UUID format (add hyphens)
+function formatUserId(userId: string): string {
+  if (userId.length === 32 && !userId.includes('-')) {
+    return `${userId.slice(0, 8)}-${userId.slice(8, 12)}-${userId.slice(12, 16)}-${userId.slice(16, 20)}-${userId.slice(20)}`
+  }
+  return userId
+}
+
 // Parse order ID format: credits_userId_creditAmount_timestamp
 function parseOrderId(orderId: string): { type: 'license' | 'credits'; userId: string; planId: string; credits?: number } | null {
   const parts = orderId.split('_')
@@ -20,13 +28,13 @@ function parseOrderId(orderId: string): { type: 'license' | 'credits'; userId: s
   if (parts[0] === 'order' && parts.length >= 4) {
     return {
       type: 'license',
-      userId: parts[1],
+      userId: formatUserId(parts[1]),
       planId: parts[2],
     }
   } else if (parts[0] === 'credits' && parts.length >= 4) {
     return {
       type: 'credits',
-      userId: parts[1],
+      userId: formatUserId(parts[1]),
       planId: 'credits',
       credits: parseInt(parts[2]) || 0,
     }
@@ -52,12 +60,12 @@ export async function POST(request: NextRequest) {
       .single()
 
     const body = await request.json()
-    const { orderId, nowpaymentsOrderId } = body
+    const { orderId, cryptomusOrderId } = body
 
-    // If nowpaymentsOrderId provided (from NOWPayments), parse it
-    const orderIdToParse = nowpaymentsOrderId || orderId
+    // If cryptomusOrderId provided (from Cryptomus), parse it
+    const orderIdToParse = cryptomusOrderId || orderId
 
-    if (!orderId && !nowpaymentsOrderId) {
+    if (!orderId && !cryptomusOrderId) {
       return NextResponse.json({ error: 'Order ID required' }, { status: 400 })
     }
 
@@ -76,9 +84,9 @@ export async function POST(request: NextRequest) {
       order = data
     }
 
-    // If not found and nowpaymentsOrderId provided, try to parse and find
-    if (!order && nowpaymentsOrderId) {
-      const parsed = parseOrderId(nowpaymentsOrderId)
+    // If not found and cryptomusOrderId provided, try to parse and find
+    if (!order && cryptomusOrderId) {
+      const parsed = parseOrderId(cryptomusOrderId)
       if (parsed) {
         // Find by user_id, credits, and status
         const { data } = await adminSupabase
@@ -86,7 +94,7 @@ export async function POST(request: NextRequest) {
           .select('*')
           .eq('user_id', parsed.userId)
           .eq('credits', parsed.credits || 0)
-          .in('status', ['pending', 'waiting', 'confirming', 'confirmed', 'sending'])
+          .in('status', ['pending', 'waiting', 'process', 'check', 'confirm_check', 'confirming'])
           .order('created_at', { ascending: false })
           .limit(1)
           .single()
@@ -98,11 +106,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    // Security: ONLY super_admin can manually confirm orders (bypass NOWPayments verification)
-    // Regular users must use /api/payments/verify which checks with NOWPayments
+    // Security: ONLY super_admin can manually confirm orders (bypass Cryptomus verification)
+    // Regular users must use /api/payments/verify which checks with Cryptomus
     if (profile?.role !== 'super_admin') {
       return NextResponse.json({
-        error: 'Only administrators can manually confirm payments. Use "Refresh & Verify" to check payment status with NOWPayments.'
+        error: 'Only administrators can manually confirm payments. Use "Refresh & Verify" to check payment status with Cryptomus.'
       }, { status: 403 })
     }
 

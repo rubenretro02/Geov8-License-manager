@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import crypto from 'crypto'
 
-const NOWPAYMENTS_API_KEY = process.env.NOWPAYMENTS_API_KEY || ''
-const NOWPAYMENTS_API_URL = 'https://api.nowpayments.io/v1'
+const CRYPTOMUS_API_KEY = process.env.CRYPTOMUS_API_KEY || ''
+const CRYPTOMUS_MERCHANT_ID = process.env.CRYPTOMUS_MERCHANT_ID || ''
+const CRYPTOMUS_API_URL = 'https://api.cryptomus.com/v1'
+
+// Generate Cryptomus signature
+function generateSign(data: object): string {
+  const jsonData = JSON.stringify(data)
+  const base64Data = Buffer.from(jsonData).toString('base64')
+  return crypto.createHash('md5').update(base64Data + CRYPTOMUS_API_KEY).digest('hex')
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,124 +22,113 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const invoiceId = request.nextUrl.searchParams.get('invoiceId')
-    const paymentId = request.nextUrl.searchParams.get('paymentId') || '5575196577'
+    // Get user's profile to check if super_admin
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
 
-    if (!invoiceId) {
-      // Get recent orders if no invoiceId provided
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('id, payment_id, status, created_at, amount, credits, user_id')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5)
+    if (profile?.role !== 'super_admin') {
+      return NextResponse.json({ error: 'Forbidden - Super admin only' }, { status: 403 })
+    }
 
-      // Build the order_ids that would be searched
-      const ordersWithBuiltIds = orders?.map(order => ({
-        ...order,
-        built_order_id: `credits_${order.user_id}_${order.credits}_${new Date(order.created_at).getTime()}`
-      }))
+    const { searchParams } = new URL(request.url)
+    const action = searchParams.get('action')
+    const uuid = searchParams.get('uuid')
+    const orderId = searchParams.get('order_id')
 
-      // Get list of payments from NOWPayments
-      let nowpaymentsData: unknown = null
-      let nowpaymentsError: unknown = null
-      try {
-        const res = await fetch(`${NOWPAYMENTS_API_URL}/payment/?limit=10&orderBy=created_at&sortBy=desc`, {
-          headers: { 'x-api-key': NOWPAYMENTS_API_KEY },
-        })
-        const rawData = await res.json()
-        if (res.ok) {
-          // Extract just order_id and payment_status for each payment
-          const payments = rawData.data || rawData || []
-          nowpaymentsData = Array.isArray(payments)
-            ? payments.map((p: Record<string, unknown>) => ({
-                payment_id: p.payment_id,
-                order_id: p.order_id,
-                payment_status: p.payment_status,
-              }))
-            : rawData
-        } else {
-          nowpaymentsError = { status: res.status, data: rawData }
+    // Get recent orders from database
+    const { data: recentOrders } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    if (action === 'compare') {
+      // Compare database orders with Cryptomus
+      let cryptomusData: unknown = null
+      let cryptomusError: unknown = null
+
+      if (CRYPTOMUS_API_KEY && CRYPTOMUS_MERCHANT_ID) {
+        try {
+          // Get payment history from Cryptomus
+          const requestData = {}
+          const sign = generateSign(requestData)
+
+          const res = await fetch(`${CRYPTOMUS_API_URL}/payment/list`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'merchant': CRYPTOMUS_MERCHANT_ID,
+              'sign': sign,
+            },
+            body: JSON.stringify(requestData),
+          })
+
+          if (res.ok) {
+            const data = await res.json()
+            if (data.state === 0) {
+              cryptomusData = data.result?.items?.slice(0, 10) || []
+            } else {
+              cryptomusError = { message: data.message }
+            }
+          } else {
+            const rawData = await res.text()
+            cryptomusError = { status: res.status, data: rawData }
+          }
+        } catch (e) {
+          cryptomusError = String(e)
         }
-      } catch (e) {
-        nowpaymentsError = String(e)
       }
 
       return NextResponse.json({
-        message: 'Compare built_order_id with NOWPayments order_id',
-        apiKeyFirst8: NOWPAYMENTS_API_KEY.substring(0, 8),
-        orders: ordersWithBuiltIds,
-        nowpaymentsPayments: nowpaymentsData,
-        nowpaymentsError: nowpaymentsError
+        message: 'Compare database orders with Cryptomus payments',
+        apiKeyFirst8: CRYPTOMUS_API_KEY.substring(0, 8),
+        databaseOrders: recentOrders,
+        cryptomusPayments: cryptomusData,
+        cryptomusError: cryptomusError
       })
     }
 
-    const results: Record<string, unknown> = {
-      invoiceId,
-      paymentId,
-      apiKeyConfigured: !!NOWPAYMENTS_API_KEY,
-      apiKeyFirst8: NOWPAYMENTS_API_KEY.substring(0, 8),
+    // Default: return debug info
+    const result: Record<string, unknown> = {
+      apiKeyConfigured: !!CRYPTOMUS_API_KEY,
+      merchantIdConfigured: !!CRYPTOMUS_MERCHANT_ID,
+      apiKeyFirst8: CRYPTOMUS_API_KEY.substring(0, 8),
+      merchantIdFirst8: CRYPTOMUS_MERCHANT_ID.substring(0, 8),
+      recentOrders,
     }
 
-    // Test 0: Check API status (verify API is working)
-    try {
-      const statusResponse = await fetch(`${NOWPAYMENTS_API_URL}/status`, {
-        headers: { 'x-api-key': NOWPAYMENTS_API_KEY },
-      })
-      results.apiStatus = statusResponse.status
-      results.apiStatusData = await statusResponse.json()
-    } catch (e) {
-      results.apiStatusError = String(e)
-    }
+    // If uuid or order_id provided, get payment info
+    if ((uuid || orderId) && CRYPTOMUS_API_KEY && CRYPTOMUS_MERCHANT_ID) {
+      const requestData: Record<string, string> = {}
+      if (uuid) requestData.uuid = uuid
+      if (orderId) requestData.order_id = orderId
 
-    // Test 1: Get list of payments (to see what payments exist)
-    try {
-      const listResponse = await fetch(`${NOWPAYMENTS_API_URL}/payment/?limit=5&orderBy=created_at&sortBy=desc`, {
-        headers: { 'x-api-key': NOWPAYMENTS_API_KEY },
-      })
-      results.listPaymentsStatus = listResponse.status
-      if (listResponse.ok) {
-        results.listPaymentsData = await listResponse.json()
-      } else {
-        results.listPaymentsError = await listResponse.text()
-      }
-    } catch (e) {
-      results.listPaymentsError = String(e)
-    }
+      const sign = generateSign(requestData)
 
-    // Test 2: Try to get the specific payment by payment_id
-    try {
-      const paymentResponse = await fetch(`${NOWPAYMENTS_API_URL}/payment/${paymentId}`, {
-        headers: { 'x-api-key': NOWPAYMENTS_API_KEY },
+      const paymentResponse = await fetch(`${CRYPTOMUS_API_URL}/payment/info`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'merchant': CRYPTOMUS_MERCHANT_ID,
+          'sign': sign,
+        },
+        body: JSON.stringify(requestData),
       })
-      results.specificPaymentStatus = paymentResponse.status
+
       if (paymentResponse.ok) {
-        results.specificPaymentData = await paymentResponse.json()
+        const data = await paymentResponse.json()
+        result.paymentInfo = data
       } else {
-        results.specificPaymentError = await paymentResponse.text()
+        result.paymentInfoError = await paymentResponse.text()
       }
-    } catch (e) {
-      results.specificPaymentError = String(e)
     }
 
-    // Test 3: invoice endpoint
-    try {
-      const invoiceResponse = await fetch(`${NOWPAYMENTS_API_URL}/invoice/${invoiceId}`, {
-        headers: { 'x-api-key': NOWPAYMENTS_API_KEY },
-      })
-      results.invoiceStatus = invoiceResponse.status
-      if (invoiceResponse.ok) {
-        results.invoiceData = await invoiceResponse.json()
-      } else {
-        results.invoiceError = await invoiceResponse.text()
-      }
-    } catch (e) {
-      results.invoiceError = String(e)
-    }
-
-    return NextResponse.json(results, { status: 200 })
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Debug error:', error)
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

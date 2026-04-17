@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { nowpaymentsOrderId, paymentId } = body
+    const { cryptomusOrderId, paymentId } = body
 
     if (!paymentId) {
       return NextResponse.json({ error: 'paymentId required' }, { status: 400 })
@@ -31,28 +31,28 @@ export async function POST(request: NextRequest) {
 
     const adminSupabase = getSupabaseAdmin()
 
-    // Find the order by nowpayments_order_id or by user and recent status
+    // Find the order by cryptomus_order_id or by user and recent status
     let order = null
 
-    if (nowpaymentsOrderId) {
+    if (cryptomusOrderId) {
       // Try to find by the order_id pattern (e.g., credits_userId_amount_timestamp)
       const { data: orderByOrderId } = await adminSupabase
         .from('orders')
         .select('*')
         .eq('user_id', user.id)
-        .eq('nowpayments_order_id', nowpaymentsOrderId)
+        .eq('cryptomus_order_id', cryptomusOrderId)
         .single()
 
       order = orderByOrderId
     }
 
-    // If not found by nowpayments_order_id, find the most recent pending order
+    // If not found by cryptomus_order_id, find the most recent pending order
     if (!order) {
       const { data: recentOrder } = await adminSupabase
         .from('orders')
         .select('*')
         .eq('user_id', user.id)
-        .in('status', ['pending', 'waiting', 'confirming'])
+        .in('status', ['pending', 'waiting', 'process', 'check'])
         .order('created_at', { ascending: false })
         .limit(1)
         .single()
@@ -64,11 +64,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
-    // Update the order with the real payment_id from NOWPayments
+    // Update the order with the payment_id from Cryptomus
     const { error: updateError } = await adminSupabase
       .from('orders')
       .update({
-        payment_id: paymentId, // This is now the real payment_id
+        payment_id: paymentId,
         updated_at: new Date().toISOString()
       })
       .eq('id', order.id)
