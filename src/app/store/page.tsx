@@ -108,6 +108,7 @@ function StoreContent() {
   const [customCredits, setCustomCredits] = useState(100)
   const [customerName, setCustomerName] = useState('')
   const [email, setEmail] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   // Custom credit price ($1 per credit by default, or custom from profile)
   const creditPrice = profile?.credit_price && profile.credit_price > 0
@@ -149,8 +150,9 @@ function StoreContent() {
             }
           }
         }
-      } catch (error) {
-        console.error('Auth check error:', error)
+      } catch (err) {
+        console.error('Auth check error:', err)
+        setError('Failed to load store. Please refresh the page.')
       } finally {
         setLoading(false)
       }
@@ -158,6 +160,19 @@ function StoreContent() {
 
     checkAuth()
   }, [searchParams, router])
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
+        <AlertCircle className="w-12 h-12 text-red-500" />
+        <p className="text-red-400">{error}</p>
+        <Button onClick={() => window.location.reload()} variant="outline">
+          Refresh Page
+        </Button>
+      </div>
+    )
+  }
 
   const currentPackage = CREDIT_PACKAGES.find(p => p.id === selectedPackage)
 
