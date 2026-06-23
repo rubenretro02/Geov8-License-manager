@@ -1,8 +1,28 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { revalidatePath } from 'next/cache'
 import type { License, LicenseFormData, Profile } from '@/lib/types'
+
+// Whether a sub-user's admin has enabled team-wide license visibility.
+// Only applies to users created by an admin (not self-registered users).
+async function adminSharesLicensesWithTeam(profile: Profile): Promise<boolean> {
+  if (profile.role !== 'user' || !profile.admin_id || profile.admin_id === profile.id) {
+    return false
+  }
+
+  // Read the admin's flag with the service client: under RLS a sub-user
+  // generally cannot read their admin's profile row.
+  const service = createServiceClient()
+  const { data } = await service
+    .from('profiles')
+    .select('share_licenses_with_team')
+    .eq('id', profile.admin_id)
+    .single()
+
+  return !!data?.share_licenses_with_team
+}
 
 // Generate random license key
 function generateLicenseKey(): string {
@@ -62,6 +82,9 @@ export async function getLicenses(): Promise<License[]> {
     .select('*')
     .order('created_at', { ascending: false })
 
+  // Whether this user can see the whole team's licenses (admin opted in)
+  let canSeeTeam = false
+
   // Filter based on role
   if (profile.role === 'super_admin') {
     // Super admin sees everything - no filter needed
@@ -69,10 +92,16 @@ export async function getLicenses(): Promise<License[]> {
     // Admin sees licenses where admin_id = their id
     query = query.eq('admin_id', profile.id)
   } else {
-    // Regular user - ONLY see their own licenses (created_by = their id)
-    // OR licenses where they are the customer (admin_id = their id for self-purchases)
-    // This prevents users without admin_id from seeing all licenses
-    query = query.or(`created_by.eq.${profile.id},admin_id.eq.${profile.id}`)
+    // Regular user. If their admin enabled team sharing, show every license in
+    // the team (admin_id = their admin). Otherwise only their own.
+    canSeeTeam = await adminSharesLicensesWithTeam(profile)
+    if (canSeeTeam && profile.admin_id) {
+      query = query.eq('admin_id', profile.admin_id)
+    } else {
+      // ONLY see their own licenses (created_by = their id) OR licenses where
+      // they are the customer (admin_id = their id for self-purchases).
+      query = query.or(`created_by.eq.${profile.id},admin_id.eq.${profile.id}`)
+    }
   }
 
   const { data, error } = await query
@@ -82,12 +111,16 @@ export async function getLicenses(): Promise<License[]> {
     return []
   }
 
-  // Populate created_by info for admin and super_admin
-  if ((profile.role === 'super_admin' || profile.role === 'admin') && data && data.length > 0) {
+  // Populate created_by info for admin, super_admin, and team-sharing users
+  if ((profile.role === 'super_admin' || profile.role === 'admin' || canSeeTeam) && data && data.length > 0) {
     const creatorIds = [...new Set(data.map(l => l.created_by).filter(Boolean))]
 
     if (creatorIds.length > 0) {
-      const { data: profiles } = await supabase
+      // Resolve creator names with the service client: a sub-user with team
+      // visibility (or even an admin) may not be able to read every creator's
+      // profile row under RLS, which would leave names blank.
+      const nameClient = createServiceClient()
+      const { data: profiles } = await nameClient
         .from('profiles')
         .select('id, username, email, admin_id')
         .in('id', creatorIds)
@@ -98,7 +131,7 @@ export async function getLicenses(): Promise<License[]> {
         let adminNameMap = new Map<string, string>()
 
         if (adminIds.length > 0) {
-          const { data: adminProfiles } = await supabase
+          const { data: adminProfiles } = await nameClient
             .from('profiles')
             .select('id, username')
             .in('id', adminIds)
@@ -338,40 +371,22 @@ export async function renewLicense(
     return { success: false, error: 'Unauthorized' }
   }
 
-  // Calculate credits needed proportionally (1 credit = 30 days)
-  const { calculateCreditsForDays } = await import('./credits')
-  const creditsNeeded = await calculateCreditsForDays(daysToAdd, false)
+  // Deduct credits using the shared accounting path. For sub-users this draws
+  // from (and is limited by) their ADMIN's credit balance, exactly like
+  // license creation — keeping renew and create consistent.
+  const { deductCreditsForLicense } = await import('./credits')
+  const creditResult = await deductCreditsForLicense(
+    false,
+    false,
+    daysToAdd,
+    `License ${licenseKey} renewed (${daysToAdd} days)`
+  )
 
-  // Deduct credits for non-super_admin users
-  if (profile.role !== 'super_admin' && creditsNeeded > 0) {
-    // Check if user has enough credits
-    if ((profile.credits || 0) < creditsNeeded) {
-      return {
-        success: false,
-        error: `Insufficient credits. You need ${creditsNeeded} credit(s), you have ${profile.credits || 0}.`
-      }
-    }
-
-    // Deduct credits (no decimals)
-    const newBalance = Math.floor((profile.credits || 0) - creditsNeeded)
-    const { error: creditError } = await supabase
-      .from('profiles')
-      .update({ credits: newBalance })
-      .eq('id', profile.id)
-
-    if (creditError) {
-      return { success: false, error: creditError.message }
-    }
-
-    // Record transaction
-    await supabase.from('credit_transactions').insert({
-      profile_id: profile.id,
-      amount: -creditsNeeded,
-      type: 'license_30d',
-      description: `License renewed (${daysToAdd} days = ${creditsNeeded} credits)`,
-      created_by: profile.id,
-    })
+  if (!creditResult.success) {
+    return { success: false, error: creditResult.error }
   }
+
+  const creditsNeeded = creditResult.creditsDeducted || 0
 
   // Get current license
   const { data: license, error: fetchError } = await supabase
@@ -411,7 +426,7 @@ export async function renewLicense(
   }
 
   revalidatePath('/')
-  return { success: true, newExpiry, creditsUsed: profile.role === 'super_admin' ? 0 : creditsNeeded }
+  return { success: true, newExpiry, creditsUsed: creditsNeeded }
 }
 
 export async function toggleLicenseStatus(
@@ -622,8 +637,13 @@ export async function getLicenseStats() {
     // Admin sees licenses where admin_id = their id
     query = query.eq('admin_id', profile.id)
   } else {
-    // Regular user - ONLY see their own licenses
-    query = query.or(`created_by.eq.${profile.id},admin_id.eq.${profile.id}`)
+    // Regular user - team licenses if their admin opted in, else only their own
+    const canSeeTeam = await adminSharesLicensesWithTeam(profile)
+    if (canSeeTeam && profile.admin_id) {
+      query = query.eq('admin_id', profile.admin_id)
+    } else {
+      query = query.or(`created_by.eq.${profile.id},admin_id.eq.${profile.id}`)
+    }
   }
 
   const { data: licenses } = await query

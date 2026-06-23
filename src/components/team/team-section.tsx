@@ -5,6 +5,7 @@ import { Users, Shield, UserCheck } from 'lucide-react'
 import type { Profile, UserRole } from '@/lib/types'
 import { TeamTable } from './team-table'
 import { CreateUserDialog } from './create-user-dialog'
+import { TeamSharingToggle } from './team-sharing-toggle'
 import { useLanguage } from '@/lib/language-context'
 
 interface TeamSectionProps {
@@ -15,9 +16,10 @@ interface TeamSectionProps {
     users: number
   }
   currentUserRole: UserRole
+  shareLicensesWithTeam?: boolean
 }
 
-export function TeamSection({ members, stats, currentUserRole }: TeamSectionProps) {
+export function TeamSection({ members, stats, currentUserRole, shareLicensesWithTeam = false }: TeamSectionProps) {
   const { t } = useLanguage()
 
   const statCards = [
@@ -64,6 +66,11 @@ export function TeamSection({ members, stats, currentUserRole }: TeamSectionProp
           </Card>
         ))}
       </div>
+
+      {/* Team license sharing (admins only) */}
+      {currentUserRole === 'admin' && (
+        <TeamSharingToggle enabled={shareLicensesWithTeam} />
+      )}
 
       {/* Actions */}
       <div className="flex justify-between items-center">

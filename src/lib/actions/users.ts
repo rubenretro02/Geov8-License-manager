@@ -235,6 +235,36 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
   return { success: true }
 }
 
+// Toggle whether this admin's sub-users can view the whole team's licenses.
+// Only admins can change it, and only on their own profile (allowed by RLS).
+export async function setTeamLicenseSharing(
+  enabled: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+
+  if (!profile) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  if (profile.role !== 'admin') {
+    return { success: false, error: 'Only admins can change team license sharing' }
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ share_licenses_with_team: enabled })
+    .eq('id', profile.id)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/team')
+  revalidatePath('/')
+  return { success: true }
+}
+
 export async function getTeamStats() {
   const supabase = await createClient()
   const profile = await getCurrentProfile()

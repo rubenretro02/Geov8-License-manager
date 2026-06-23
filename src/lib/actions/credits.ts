@@ -1,13 +1,16 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { revalidatePath } from 'next/cache'
 import { getCurrentProfile } from './licenses'
 import type { CreditTransaction, Profile } from '@/lib/types'
 
 // Check and reset trials if needed (monthly reset)
+// Uses the service client because the profile being reset may belong to the
+// caller's ADMIN (a sub-user cannot update the admin's row under RLS).
 export async function checkAndResetTrials(profile: Profile): Promise<Profile> {
-  const supabase = await createClient()
+  const supabase = createServiceClient()
   const now = new Date()
 
   // If no reset date or reset date has passed, reset trials
@@ -70,8 +73,11 @@ async function getAdminProfileForUser(profile: Profile): Promise<Profile | null>
       return profile // Use their own profile
     }
 
-    // User created by admin: fetch the admin's profile
-    const supabase = await createClient()
+    // User created by admin: fetch the admin's profile.
+    // Use the service client: under RLS a sub-user generally cannot read their
+    // admin's profile row, which would make this return null and incorrectly
+    // block license creation ("Admin not found").
+    const supabase = createServiceClient()
     const { data: adminProfile } = await supabase
       .from('profiles')
       .select('*')
@@ -179,9 +185,13 @@ export async function calculateCreditsForDays(daysValid: number, isPermanent: bo
 export async function deductCreditsForLicense(
   isPermanent: boolean,
   isTrial: boolean,
-  daysValid: number = 30
+  daysValid: number = 30,
+  descriptionOverride?: string
 ): Promise<{ success: boolean; error?: string; creditsDeducted?: number }> {
-  const supabase = await createClient()
+  // Service client: credits/trials live on the ADMIN's profile and the
+  // transaction ledger is not writable by sub-users under RLS. The caller is
+  // still authenticated/authorized via getCurrentProfile() below.
+  const supabase = createServiceClient()
   const profile = await getCurrentProfile()
 
   if (!profile) {
@@ -267,9 +277,9 @@ export async function deductCreditsForLicense(
     profile_id: creditProfile.id,
     amount: -creditsNeeded,
     type: isPermanent ? 'license_permanent' : 'license_30d',
-    description: isPermanent
+    description: descriptionOverride || (isPermanent
       ? `Permanent license created by ${profile.username || profile.email}`
-      : `License created (${daysValid} days) by ${profile.username || profile.email}`,
+      : `License created (${daysValid} days) by ${profile.username || profile.email}`),
     created_by: profile.id,
   })
 

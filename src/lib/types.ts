@@ -15,6 +15,9 @@ export interface Profile {
   trial_limit: number // Max trials per month
   trials_used_this_month: number
   trial_reset_date: string | null // When trials reset
+  // When true (set on an admin), the admin's sub-users can view ALL of the
+  // team's licenses (including those created by the admin), not just their own
+  share_licenses_with_team: boolean
   // Telegram notifications
   telegram_chat_id: string | null
   telegram_enabled: boolean
