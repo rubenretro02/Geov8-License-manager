@@ -57,6 +57,8 @@ interface LicensesTableProps {
 export function LicensesTable({ licenses, profile }: LicensesTableProps) {
   const isSuperAdmin = profile?.role === 'super_admin'
   const isAdminOrAbove = profile?.role === 'super_admin' || profile?.role === 'admin'
+  // Users granted team-license visibility also see who created each license
+  const showCreator = isAdminOrAbove || (profile?.role === 'user' && !!profile?.share_licenses_with_team)
   const { t, lang } = useLanguage()
   const [selectedLicense, setSelectedLicense] = useState<License | null>(null)
   const [renewDialogOpen, setRenewDialogOpen] = useState(false)
@@ -170,7 +172,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
               <TableHead className="text-zinc-400 font-semibold">{t('payment')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('expires')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('hwid')}</TableHead>
-              {isAdminOrAbove && (
+              {showCreator && (
                 <TableHead className="text-zinc-400 font-semibold">{t('createdBy')}</TableHead>
               )}
               <TableHead className="text-zinc-400 font-semibold text-right">{t('actions')}</TableHead>
@@ -179,7 +181,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
           <TableBody>
             {licenses.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isAdminOrAbove ? 9 : 8} className="h-32 text-center text-zinc-500">
+                <TableCell colSpan={showCreator ? 9 : 8} className="h-32 text-center text-zinc-500">
                   {t('noLicenses')}
                 </TableCell>
               </TableRow>
@@ -319,7 +321,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
                         <span className="text-xs text-zinc-500">{t('notActivated')}</span>
                       )}
                     </TableCell>
-                    {isAdminOrAbove && (
+                    {showCreator && (
                       <TableCell>
                         {license.created_by_name ? (
                           <div className="space-y-0.5">
