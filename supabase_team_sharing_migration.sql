@@ -1,16 +1,18 @@
 -- ============================================
--- MIGRATION: Team license sharing
+-- MIGRATION: Team license sharing (per user)
 -- Run this in the Supabase SQL Editor
 -- ============================================
 --
--- Adds a per-admin flag. When an admin enables it, every sub-user that belongs
--- to that admin (profiles.admin_id = admin.id) can VIEW all of the team's
--- licenses (including the admin's own), instead of only the licenses they
--- created themselves.
+-- Adds a PER-USER flag, set on each sub-user's own profile row. When an admin
+-- turns it on for a specific user (from the Team page), that user can VIEW and
+-- manage all of the team's licenses (admin_id = their admin), instead of only
+-- the ones they created themselves. The admin decides per user, not globally.
 --
--- No RLS change is required: the existing "licenses_select" policy already lets
--- a user read rows where admin_id = (their admin_id). The flag is enforced at
--- the application layer so the admin stays in control of when it is on.
+-- No RLS change is required: the existing "licenses_select"/"licenses_update"
+-- policies already let a team member read/update rows where
+-- admin_id = (their admin_id). The flag is enforced at the application layer.
+-- The admin sets it on each user's row via the service role (RLS does not let
+-- an admin write another profile directly).
 
 ALTER TABLE profiles
 ADD COLUMN IF NOT EXISTS share_licenses_with_team BOOLEAN DEFAULT false;

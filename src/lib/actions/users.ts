@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { revalidatePath } from 'next/cache'
 import type { Profile, CreateUserFormData } from '@/lib/types'
 import { getCurrentProfile } from './licenses'
@@ -235,26 +236,49 @@ export async function deleteUser(userId: string): Promise<{ success: boolean; er
   return { success: true }
 }
 
-// Toggle whether this admin's sub-users can view the whole team's licenses.
-// Only admins can change it, and only on their own profile (allowed by RLS).
-export async function setTeamLicenseSharing(
+// Grant/revoke a SPECIFIC sub-user's access to view the whole team's licenses.
+// Set per user by their admin (or super_admin). Uses the service client because
+// RLS does not let an admin update another user's profile row.
+export async function setUserTeamLicenseAccess(
+  userId: string,
   enabled: boolean
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-  const profile = await getCurrentProfile()
+  const currentProfile = await getCurrentProfile()
 
-  if (!profile) {
+  if (!currentProfile) {
     return { success: false, error: 'Unauthorized' }
   }
 
-  if (profile.role !== 'admin') {
-    return { success: false, error: 'Only admins can change team license sharing' }
+  if (currentProfile.role === 'user') {
+    return { success: false, error: 'Only admins can change this' }
   }
 
-  const { error } = await supabase
+  const service = createServiceClient()
+
+  // Load the target user and verify it can be managed by the caller
+  const { data: targetUser } = await service
+    .from('profiles')
+    .select('id, role, admin_id')
+    .eq('id', userId)
+    .single()
+
+  if (!targetUser) {
+    return { success: false, error: 'User not found' }
+  }
+
+  if (targetUser.role !== 'user') {
+    return { success: false, error: 'Only team users can be granted license visibility' }
+  }
+
+  // Admins may only manage users that belong to them; super_admin manages anyone
+  if (currentProfile.role === 'admin' && targetUser.admin_id !== currentProfile.id) {
+    return { success: false, error: 'Solo puedes gestionar usuarios de tu equipo' }
+  }
+
+  const { error } = await service
     .from('profiles')
     .update({ share_licenses_with_team: enabled })
-    .eq('id', profile.id)
+    .eq('id', userId)
 
   if (error) {
     return { success: false, error: error.message }

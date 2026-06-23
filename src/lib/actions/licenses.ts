@@ -5,23 +5,14 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { revalidatePath } from 'next/cache'
 import type { License, LicenseFormData, Profile } from '@/lib/types'
 
-// Whether a sub-user's admin has enabled team-wide license visibility.
-// Only applies to users created by an admin (not self-registered users).
-async function adminSharesLicensesWithTeam(profile: Profile): Promise<boolean> {
-  if (profile.role !== 'user' || !profile.admin_id || profile.admin_id === profile.id) {
-    return false
-  }
-
-  // Read the admin's flag with the service client: under RLS a sub-user
-  // generally cannot read their admin's profile row.
-  const service = createServiceClient()
-  const { data } = await service
-    .from('profiles')
-    .select('share_licenses_with_team')
-    .eq('id', profile.admin_id)
-    .single()
-
-  return !!data?.share_licenses_with_team
+// Whether THIS sub-user has been granted visibility into the whole team's
+// licenses (a per-user flag the admin sets on each user's profile). Only
+// applies to users created by an admin (not self-registered users).
+function userCanViewTeamLicenses(profile: Profile): boolean {
+  return profile.role === 'user'
+    && !!profile.share_licenses_with_team
+    && !!profile.admin_id
+    && profile.admin_id !== profile.id
 }
 
 // Generate random license key
@@ -92,9 +83,9 @@ export async function getLicenses(): Promise<License[]> {
     // Admin sees licenses where admin_id = their id
     query = query.eq('admin_id', profile.id)
   } else {
-    // Regular user. If their admin enabled team sharing, show every license in
-    // the team (admin_id = their admin). Otherwise only their own.
-    canSeeTeam = await adminSharesLicensesWithTeam(profile)
+    // Regular user. If the admin granted this user team visibility, show every
+    // license in the team (admin_id = their admin). Otherwise only their own.
+    canSeeTeam = userCanViewTeamLicenses(profile)
     if (canSeeTeam && profile.admin_id) {
       query = query.eq('admin_id', profile.admin_id)
     } else {
@@ -637,8 +628,8 @@ export async function getLicenseStats() {
     // Admin sees licenses where admin_id = their id
     query = query.eq('admin_id', profile.id)
   } else {
-    // Regular user - team licenses if their admin opted in, else only their own
-    const canSeeTeam = await adminSharesLicensesWithTeam(profile)
+    // Regular user - team licenses if granted by the admin, else only their own
+    const canSeeTeam = userCanViewTeamLicenses(profile)
     if (canSeeTeam && profile.admin_id) {
       query = query.eq('admin_id', profile.admin_id)
     } else {

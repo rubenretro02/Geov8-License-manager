@@ -44,7 +44,6 @@ export default async function TeamPage() {
             members={members}
             stats={stats}
             currentUserRole={profile.role}
-            shareLicensesWithTeam={profile.share_licenses_with_team ?? false}
           />
         </div>
       </main>

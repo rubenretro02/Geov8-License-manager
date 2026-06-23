@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,8 +21,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { MoreHorizontal, Trash2, Shield, UserCheck } from 'lucide-react'
 import type { Profile, UserRole } from '@/lib/types'
-import { deleteUser, updateUserRole } from '@/lib/actions/users'
+import { deleteUser, updateUserRole, setUserTeamLicenseAccess } from '@/lib/actions/users'
 import { toast } from 'sonner'
+import { useState } from 'react'
 import { useLanguage } from '@/lib/language-context'
 
 interface TeamTableProps {
@@ -31,6 +33,26 @@ interface TeamTableProps {
 
 export function TeamTable({ members, currentUserRole }: TeamTableProps) {
   const { t } = useLanguage()
+  // Local view of each user's "can view team licenses" flag for optimistic UI
+  const [access, setAccess] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(members.map((m) => [m.id, !!m.share_licenses_with_team]))
+  )
+  const [savingId, setSavingId] = useState<string | null>(null)
+
+  const handleToggleAccess = async (member: Profile, next: boolean) => {
+    setSavingId(member.id)
+    setAccess((prev) => ({ ...prev, [member.id]: next }))
+
+    const result = await setUserTeamLicenseAccess(member.id, next)
+    if (result.success) {
+      toast.success(next ? t('teamSharingEnabled') : t('teamSharingDisabled'))
+    } else {
+      // Revert on failure
+      setAccess((prev) => ({ ...prev, [member.id]: !next }))
+      toast.error(result.error || t('errorOccurred'))
+    }
+    setSavingId(null)
+  }
 
   const handleDelete = async (member: Profile) => {
     if (!confirm(`Delete ${member.full_name || member.username}?`)) return
@@ -83,6 +105,7 @@ export function TeamTable({ members, currentUserRole }: TeamTableProps) {
             <TableHead className="text-zinc-400 font-semibold">{t('user')}</TableHead>
             <TableHead className="text-zinc-400 font-semibold">{t('email')}</TableHead>
             <TableHead className="text-zinc-400 font-semibold">{t('role')}</TableHead>
+            <TableHead className="text-zinc-400 font-semibold">{t('teamLicensesColumn')}</TableHead>
             <TableHead className="text-zinc-400 font-semibold">Created</TableHead>
             <TableHead className="text-zinc-400 font-semibold text-right">{t('actions')}</TableHead>
           </TableRow>
@@ -90,7 +113,7 @@ export function TeamTable({ members, currentUserRole }: TeamTableProps) {
         <TableBody>
           {members.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="h-32 text-center text-zinc-500">
+              <TableCell colSpan={6} className="h-32 text-center text-zinc-500">
                 {t('noTeamMembers')}
               </TableCell>
             </TableRow>
@@ -105,6 +128,18 @@ export function TeamTable({ members, currentUserRole }: TeamTableProps) {
                 </TableCell>
                 <TableCell className="text-zinc-300">{member.email}</TableCell>
                 <TableCell>{getRoleBadge(member.role)}</TableCell>
+                <TableCell>
+                  {member.role === 'user' ? (
+                    <Switch
+                      checked={access[member.id] ?? false}
+                      onCheckedChange={(next) => handleToggleAccess(member, next)}
+                      disabled={savingId === member.id}
+                      aria-label={t('teamLicensesColumn')}
+                    />
+                  ) : (
+                    <span className="text-zinc-600 text-sm">—</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-zinc-400 text-sm">
                   {format(new Date(member.created_at), 'PP')}
                 </TableCell>
