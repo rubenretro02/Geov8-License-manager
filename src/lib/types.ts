@@ -76,6 +76,17 @@ export interface License {
   is_internal?: boolean
   // Distinct devices seen on this key (from device_activations), populated by getLicenses
   device_count?: number
+  // Location rules pushed to the desktop app. With lock_location_settings on,
+  // the app enforces these lists and the user can't edit them.
+  allowed_countries?: string[] | null
+  allowed_states?: string[] | null
+  lock_location_settings?: boolean
+}
+
+export type LocationRules = {
+  allowed_countries: string[]
+  allowed_states: string[]
+  lock_location_settings: boolean
 }
 
 export interface CheckLog {

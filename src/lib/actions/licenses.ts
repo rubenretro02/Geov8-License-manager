@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { revalidatePath } from 'next/cache'
-import type { License, LicenseFormData, Profile } from '@/lib/types'
+import type { License, LicenseFormData, LocationRules, Profile } from '@/lib/types'
 
 // Whether THIS sub-user has been granted visibility into the whole team's
 // licenses (a per-user flag the admin sets on each user's profile). Only
@@ -458,6 +458,49 @@ export async function renewLicense(
 
   revalidatePath('/')
   return { success: true, newExpiry, creditsUsed: creditsNeeded }
+}
+
+/**
+ * Whether this profile may change a license's location rules: super_admin,
+ * the admin whose team owns it, or the user who created it.
+ */
+export async function canEditLocationRules(licenseKey: string): Promise<boolean> {
+  const profile = await getCurrentProfile()
+  if (!profile) return false
+  if (profile.role === 'super_admin') return true
+
+  const supabase = await createClient()
+  const { data: license } = await supabase
+    .from('licenses')
+    .select('created_by, admin_id')
+    .eq('license_key', licenseKey)
+    .single()
+  if (!license) return false
+
+  if (profile.role === 'admin') return license.admin_id === profile.id
+  return license.created_by === profile.id
+}
+
+/**
+ * Push allowed countries/states to the desktop app for this license. With
+ * lock_location_settings on, the app enforces the lists and locks the fields
+ * for the end user. Requires supabase_location_rules_migration.sql.
+ */
+export async function updateLocationRules(
+  licenseKey: string,
+  rules: LocationRules
+): Promise<{ success: boolean; error?: string }> {
+  if (!(await canEditLocationRules(licenseKey))) {
+    return { success: false, error: 'Only the admin or the creator of this license can change its location rules' }
+  }
+
+  const clean = (list: string[]) => list.map(s => s.trim()).filter(Boolean)
+
+  return updateLicense(licenseKey, {
+    allowed_countries: clean(rules.allowed_countries),
+    allowed_states: clean(rules.allowed_states),
+    lock_location_settings: !!rules.lock_location_settings,
+  })
 }
 
 export async function toggleLicenseStatus(

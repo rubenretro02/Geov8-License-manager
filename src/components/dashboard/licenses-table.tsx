@@ -491,6 +491,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
             license={selectedLicense}
             open={editDialogOpen}
             onOpenChange={setEditDialogOpen}
+            profile={profile}
           />
         </>
       )}
