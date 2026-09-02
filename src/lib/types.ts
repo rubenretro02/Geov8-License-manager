@@ -72,6 +72,10 @@ export interface License {
   alert_gps: boolean
   alert_on_fail: boolean
   alert_on_success: boolean
+  // Internal / VPS license: never expires, unlimited devices, no credits
+  is_internal?: boolean
+  // Distinct devices seen on this key (from device_activations), populated by getLicenses
+  device_count?: number
 }
 
 export interface CheckLog {
@@ -133,6 +137,8 @@ export type LicenseFormData = {
   alert_gps?: boolean
   alert_on_fail?: boolean
   alert_on_success?: boolean
+  // Internal / VPS license (super_admin only)
+  is_internal?: boolean
 }
 
 export type CreateUserFormData = {
