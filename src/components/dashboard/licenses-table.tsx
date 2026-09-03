@@ -172,6 +172,9 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
               <TableHead className="text-zinc-400 font-semibold">{t('payment')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('expires')}</TableHead>
               <TableHead className="text-zinc-400 font-semibold">{t('hwid')}</TableHead>
+              <TableHead className="text-zinc-400 font-semibold text-center">
+                {lang === 'es' ? 'Equipos' : 'Devices'}
+              </TableHead>
               {showCreator && (
                 <TableHead className="text-zinc-400 font-semibold">{t('createdBy')}</TableHead>
               )}
@@ -181,7 +184,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
           <TableBody>
             {licenses.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={showCreator ? 9 : 8} className="h-32 text-center text-zinc-500">
+                <TableCell colSpan={showCreator ? 10 : 9} className="h-32 text-center text-zinc-500">
                   {t('noLicenses')}
                 </TableCell>
               </TableRow>
@@ -258,6 +261,11 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1.5">
+                        {license.is_internal && (
+                          <Badge className="bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30">
+                            {lang === 'es' ? 'Interna' : 'Internal'}
+                          </Badge>
+                        )}
                         {license.is_trial && (
                           <Badge className="bg-purple-500/20 text-purple-400 hover:bg-purple-500/30">
                             {t('trialStatus')}
@@ -320,6 +328,20 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
                       ) : (
                         <span className="text-xs text-zinc-500">{t('notActivated')}</span>
                       )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {/* Distinct machines seen on this key. Internal keys are
+                          expected to have many; a customer key with several
+                          devices is a shared key worth a look. */}
+                      <Badge className={
+                        (license.device_count || 0) === 0
+                          ? 'bg-zinc-700 text-zinc-400'
+                          : license.is_internal || (license.device_count || 0) === 1
+                            ? 'bg-cyan-500/20 text-cyan-400'
+                            : 'bg-amber-500/20 text-amber-400'
+                      }>
+                        {license.device_count || 0}
+                      </Badge>
                     </TableCell>
                     {showCreator && (
                       <TableCell>
@@ -469,6 +491,7 @@ export function LicensesTable({ licenses, profile }: LicensesTableProps) {
             license={selectedLicense}
             open={editDialogOpen}
             onOpenChange={setEditDialogOpen}
+            profile={profile}
           />
         </>
       )}

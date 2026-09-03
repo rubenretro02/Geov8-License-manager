@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Loader2, Copy, Check, Coins, FlaskConical, Phone, RefreshCw } from 'lucide-react'
+import { Plus, Loader2, Copy, Check, Coins, FlaskConical, Phone, RefreshCw, Server } from 'lucide-react'
 import { AlertSettings } from './alert-settings'
 import { createLicense } from '@/lib/actions/licenses'
 import { getCreditsInfoForDisplay } from '@/lib/actions/credits'
@@ -64,6 +64,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
     is_paid: false,
     is_trial: false,
     is_permanent: false,
+    is_internal: false,
     payment_amount: 50,
     payment_method: 'paypal',
     notes: '',
@@ -122,6 +123,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
       is_paid: false,
       is_trial: false,
       is_permanent: false,
+      is_internal: false,
       payment_amount: 50,
       payment_method: 'paypal',
       notes: '',
@@ -156,7 +158,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
   }
 
   // Check if auto renew can be enabled (not trial, not permanent)
-  const canAutoRenew = !formData.is_trial && !formData.is_permanent
+  const canAutoRenew = !formData.is_trial && !formData.is_permanent && !formData.is_internal
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -286,7 +288,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
             </div>
 
             {/* Days Valid */}
-            {!formData.is_permanent && (
+            {!formData.is_permanent && !formData.is_internal && (
               <div className="space-y-2">
                 <Label htmlFor="days" className="text-zinc-300">
                   {t('daysValid')} {formData.is_trial ? `(max. ${maxTrialDays} day${maxTrialDays > 1 ? 's' : ''})` : ''}
@@ -345,7 +347,36 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
               </div>
             )}
 
+            {/* Internal / VPS License Toggle - super_admin only */}
+            {profile?.role === 'super_admin' && (
+              <div className="flex items-center justify-between p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">
+                <div>
+                  <p className="text-white font-medium flex items-center gap-2">
+                    <Server className="h-4 w-4 text-cyan-400" />
+                    {lang === 'es' ? 'Licencia Interna (VPS)' : 'Internal License (VPS)'}
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    {lang === 'es'
+                      ? 'Nunca vence, equipos ilimitados, sin créditos. Solo para uso propio.'
+                      : 'Never expires, unlimited devices, no credits. For your own machines only.'}
+                  </p>
+                </div>
+                <Switch
+                  checked={formData.is_internal}
+                  onCheckedChange={(checked) => setFormData({
+                    ...formData,
+                    is_internal: checked,
+                    is_trial: false,
+                    is_permanent: checked ? true : formData.is_permanent,
+                    is_paid: false,
+                    auto_renew: false,
+                  })}
+                />
+              </div>
+            )}
+
             {/* Trial License Toggle */}
+            {!formData.is_internal && (
             <div className="flex items-center justify-between p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
               <div>
                 <p className="text-white font-medium">{t('isTrial')}</p>
@@ -368,8 +399,10 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
                 })}
               />
             </div>
+            )}
 
             {/* Permanent License Toggle */}
+            {!formData.is_internal && (
             <div className="flex items-center justify-between p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
               <div>
                 <p className="text-white font-medium">{t('permanent')}</p>
@@ -385,6 +418,7 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
                 })}
               />
             </div>
+            )}
 
             {/* Auto Renew Toggle - Only show if not trial and not permanent */}
             {canAutoRenew && (
@@ -411,8 +445,8 @@ export function CreateLicenseDialog({ profile }: CreateLicenseDialogProps) {
               </div>
             )}
 
-            {/* Payment Option - Hidden if trial */}
-            {!formData.is_trial && (
+            {/* Payment Option - Hidden if trial or internal */}
+            {!formData.is_trial && !formData.is_internal && (
               <>
                 <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-xl">
                   <div>

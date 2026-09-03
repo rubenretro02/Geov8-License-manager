@@ -10,9 +10,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, Save, User, Mail, Phone } from 'lucide-react'
-import type { License } from '@/lib/types'
-import { updateLicense } from '@/lib/actions/licenses'
+import { Switch } from '@/components/ui/switch'
+import { Loader2, Save, User, Mail, Phone, MapPin, Lock } from 'lucide-react'
+import type { License, Profile } from '@/lib/types'
+import { updateLicense, updateLocationRules } from '@/lib/actions/licenses'
 import { toast } from 'sonner'
 import { useLanguage } from '@/lib/language-context'
 
@@ -20,9 +21,10 @@ interface EditLicenseDialogProps {
   license: License
   open: boolean
   onOpenChange: (open: boolean) => void
+  profile?: Profile | null
 }
 
-export function EditLicenseDialog({ license, open, onOpenChange }: EditLicenseDialogProps) {
+export function EditLicenseDialog({ license, open, onOpenChange, profile }: EditLicenseDialogProps) {
   const { lang } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -30,6 +32,21 @@ export function EditLicenseDialog({ license, open, onOpenChange }: EditLicenseDi
     customer_email: '',
     phone_number: '',
   })
+  // Location rules pushed to the desktop app (comma-separated in the UI)
+  const [rules, setRules] = useState({
+    allowed_countries: '',
+    allowed_states: '',
+    lock_location_settings: false,
+  })
+
+  // Only super_admin, the owning admin, or the creator may change the rules.
+  // The server action enforces this too; the UI just hides it for everyone else.
+  const canEditRules =
+    !!profile && (
+      profile.role === 'super_admin' ||
+      (profile.role === 'admin' && license.admin_id === profile.id) ||
+      license.created_by === profile.id
+    )
 
   // Reset form when dialog opens with new license
   useEffect(() => {
@@ -39,8 +56,15 @@ export function EditLicenseDialog({ license, open, onOpenChange }: EditLicenseDi
         customer_email: license.customer_email || '',
         phone_number: license.phone_number || '',
       })
+      setRules({
+        allowed_countries: (license.allowed_countries || []).join(', '),
+        allowed_states: (license.allowed_states || []).join(', '),
+        lock_location_settings: !!license.lock_location_settings,
+      })
     }
   }, [open, license])
+
+  const split = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,12 +77,25 @@ export function EditLicenseDialog({ license, open, onOpenChange }: EditLicenseDi
         phone_number: formData.phone_number || null,
       })
 
-      if (result.success) {
-        toast.success(lang === 'es' ? 'Licencia actualizada' : 'License updated')
-        onOpenChange(false)
-      } else {
+      if (!result.success) {
         toast.error(result.error || (lang === 'es' ? 'Error al actualizar' : 'Failed to update'))
+        return
       }
+
+      if (canEditRules) {
+        const rulesResult = await updateLocationRules(license.license_key, {
+          allowed_countries: split(rules.allowed_countries),
+          allowed_states: split(rules.allowed_states),
+          lock_location_settings: rules.lock_location_settings,
+        })
+        if (!rulesResult.success) {
+          toast.error(rulesResult.error || (lang === 'es' ? 'Error al guardar reglas de ubicación' : 'Failed to save location rules'))
+          return
+        }
+      }
+
+      toast.success(lang === 'es' ? 'Licencia actualizada' : 'License updated')
+      onOpenChange(false)
     } catch (err) {
       toast.error(lang === 'es' ? 'Error al actualizar' : 'Failed to update')
     } finally {
@@ -68,7 +105,7 @@ export function EditLicenseDialog({ license, open, onOpenChange }: EditLicenseDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 max-w-md">
+      <DialogContent className="bg-zinc-900 border-zinc-800 max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             {lang === 'es' ? 'Editar Licencia' : 'Edit License'}
@@ -133,6 +170,67 @@ export function EditLicenseDialog({ license, open, onOpenChange }: EditLicenseDi
                 : 'Include country code. Will be used for WhatsApp contact.'}
             </p>
           </div>
+
+          {/* Location rules pushed to the desktop app */}
+          {canEditRules && (
+            <div className="space-y-3 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white font-medium flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-cyan-400" />
+                    {lang === 'es' ? 'Reglas de ubicación' : 'Location rules'}
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    {lang === 'es'
+                      ? 'Países / estados permitidos que usa la app. Vacío = sin restricción.'
+                      : 'Allowed countries / states the app checks against. Empty = no restriction.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-zinc-300 text-xs">
+                  {lang === 'es' ? 'Países permitidos' : 'Allowed countries'}
+                </Label>
+                <Input
+                  value={rules.allowed_countries}
+                  onChange={(e) => setRules({ ...rules, allowed_countries: e.target.value })}
+                  placeholder="United States, USA, US"
+                  className="bg-zinc-800 border-zinc-700 text-white"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-zinc-300 text-xs">
+                  {lang === 'es' ? 'Estados permitidos' : 'Allowed states'}
+                </Label>
+                <Input
+                  value={rules.allowed_states}
+                  onChange={(e) => setRules({ ...rules, allowed_states: e.target.value })}
+                  placeholder="Florida, Texas"
+                  className="bg-zinc-800 border-zinc-700 text-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <p className="text-sm text-white flex items-center gap-2">
+                    <Lock className="h-3.5 w-3.5 text-amber-400" />
+                    {lang === 'es' ? 'Forzar desde el manager' : 'Enforce from manager'}
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    {lang === 'es'
+                      ? 'La app usa estas listas y el usuario no puede editarlas.'
+                      : 'The app uses these lists and the user cannot edit them.'}
+                  </p>
+                </div>
+                <Switch
+                  checked={rules.lock_location_settings}
+                  onCheckedChange={(checked) => setRules({ ...rules, lock_location_settings: checked })}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-2 pt-2">

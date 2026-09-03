@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { revalidatePath } from 'next/cache'
-import type { License, LicenseFormData, Profile } from '@/lib/types'
+import type { License, LicenseFormData, LocationRules, Profile } from '@/lib/types'
 
 // Whether THIS sub-user has been granted visibility into the whole team's
 // licenses (a per-user flag the admin sets on each user's profile). Only
@@ -63,6 +63,36 @@ async function getAdminIdForUser(): Promise<string | null> {
 }
 
 export async function getLicenses(): Promise<License[]> {
+  return attachDeviceCounts(await getLicensesRaw())
+}
+
+// How many distinct devices have used each key. The desktop app records one
+// device_activations row per machine (persistent activation), so this is how
+// an internal/VPS key's real usage - or a shared customer key - becomes visible.
+async function attachDeviceCounts(licenses: License[]): Promise<License[]> {
+  if (licenses.length === 0) return licenses
+
+  const keys = licenses.map(l => l.license_key)
+  const { data, error } = await createServiceClient()
+    .from('device_activations')
+    .select('license_key, hardware_id')
+    .in('license_key', keys)
+
+  if (error) {
+    console.error('Error fetching device activations:', error)
+    return licenses
+  }
+
+  const devicesByKey = new Map<string, Set<string>>()
+  for (const row of data || []) {
+    if (!devicesByKey.has(row.license_key)) devicesByKey.set(row.license_key, new Set())
+    devicesByKey.get(row.license_key)!.add(row.hardware_id)
+  }
+
+  return licenses.map(l => ({ ...l, device_count: devicesByKey.get(l.license_key)?.size || 0 }))
+}
+
+async function getLicensesRaw(): Promise<License[]> {
   const supabase = await createClient()
   const profile = await getCurrentProfile()
 
@@ -187,8 +217,15 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
     return { success: false, error: 'Unauthorized' }
   }
 
-  const isTrial = formData.is_trial || false
-  const isPermanent = formData.is_permanent || formData.days_valid === 0
+  // Internal / VPS keys: never expire, unlimited devices, cost no credits.
+  // Restricted to super_admin so resellers can't mint free permanent keys.
+  const isInternal = !!formData.is_internal
+  if (isInternal && profile.role !== 'super_admin') {
+    return { success: false, error: 'Only a super admin can create internal licenses' }
+  }
+
+  const isTrial = !isInternal && (formData.is_trial || false)
+  const isPermanent = isInternal || formData.is_permanent || formData.days_valid === 0
 
   // Check credits/trials BEFORE creating license (skip for super_admin)
   let creditsDeducted = 0
@@ -258,7 +295,7 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
 
   const licenseData: Partial<License> = {
     license_key: licenseKey,
-    customer_name: formData.customer_name || null,
+    customer_name: formData.customer_name || (isInternal ? 'INTERNAL VPS' : null),
     customer_email: formData.customer_email || null,
     phone_number: phoneNumber || null,
     is_active: true,
@@ -269,11 +306,14 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
     payment_date: isPaid ? new Date().toISOString() : null,
     notes: formData.notes || null,
     current_activations: 0,
-    max_activations: 1,
+    max_activations: isInternal ? 999 : 1,
+    // Only send the column when set, so normal license creation keeps working
+    // on a database where supabase_internal_licenses_migration.sql hasn't run yet.
+    ...(isInternal ? { is_internal: true } : {}),
     created_by: profile.id,
     admin_id: adminId,
     // Auto renewal (disabled for trials and permanent)
-    auto_renew: isTrial || isPermanent ? false : autoRenew,
+    auto_renew: isTrial || isPermanent || isInternal ? false : autoRenew,
     auto_renew_days: autoRenewDays || formData.days_valid,
     // Alert settings
     alert_enabled: alertSettings.alert_enabled as boolean,
@@ -283,8 +323,8 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
     alert_on_success: alertSettings.alert_on_success as boolean,
   }
 
-  // Set expiration date
-  if (isTrial || daysValid > 0) {
+  // Set expiration date (internal keys never expire)
+  if (!isInternal && (isTrial || daysValid > 0)) {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + (isTrial ? daysValid : formData.days_valid))
     licenseData.expires_at = expiresAt.toISOString()
@@ -299,7 +339,7 @@ export async function createLicense(formData: LicenseFormData): Promise<{ succes
 
   // Calculate proportional credits used
   const { calculateCreditsForDays } = await import('./credits')
-  const creditsUsed = isTrial ? 0 : await calculateCreditsForDays(formData.days_valid, isPermanent)
+  const creditsUsed = isTrial || isInternal ? 0 : await calculateCreditsForDays(formData.days_valid, isPermanent)
 
   revalidatePath('/')
   return { success: true, licenseKey, creditsUsed }
@@ -418,6 +458,49 @@ export async function renewLicense(
 
   revalidatePath('/')
   return { success: true, newExpiry, creditsUsed: creditsNeeded }
+}
+
+/**
+ * Whether this profile may change a license's location rules: super_admin,
+ * the admin whose team owns it, or the user who created it.
+ */
+export async function canEditLocationRules(licenseKey: string): Promise<boolean> {
+  const profile = await getCurrentProfile()
+  if (!profile) return false
+  if (profile.role === 'super_admin') return true
+
+  const supabase = await createClient()
+  const { data: license } = await supabase
+    .from('licenses')
+    .select('created_by, admin_id')
+    .eq('license_key', licenseKey)
+    .single()
+  if (!license) return false
+
+  if (profile.role === 'admin') return license.admin_id === profile.id
+  return license.created_by === profile.id
+}
+
+/**
+ * Push allowed countries/states to the desktop app for this license. With
+ * lock_location_settings on, the app enforces the lists and locks the fields
+ * for the end user. Requires supabase_location_rules_migration.sql.
+ */
+export async function updateLocationRules(
+  licenseKey: string,
+  rules: LocationRules
+): Promise<{ success: boolean; error?: string }> {
+  if (!(await canEditLocationRules(licenseKey))) {
+    return { success: false, error: 'Only the admin or the creator of this license can change its location rules' }
+  }
+
+  const clean = (list: string[]) => list.map(s => s.trim()).filter(Boolean)
+
+  return updateLicense(licenseKey, {
+    allowed_countries: clean(rules.allowed_countries),
+    allowed_states: clean(rules.allowed_states),
+    lock_location_settings: !!rules.lock_location_settings,
+  })
 }
 
 export async function toggleLicenseStatus(
